@@ -15,10 +15,22 @@
 
 ## 패치 목록
 
-### (없음 — 2026-08-13 기준)
+브랜치 분기 시점: `ad2d620` (upstream v4.9.7)
 
-브랜치 분기 시점: `ad2d620` (upstream v4.9.7). 아직 코드 패치 0건.
-첫 패치 예정: 국세청 예규 본문 조회 (Phase 2 — `src/tools/nts-body.ts` 신규).
+### 1. 국세청 예규·법령해석 본문 조회 (2026-08-13)
+- **무엇을**: `get_decision_text(domain="nts")`가 `[NOT_SUPPORTED]` 대신
+  국세법령정보시스템(taxlaw.nts.go.kr) `action.do`(ASIQTB002PR01)로 본문을 조회
+- **왜**: 법제처 OPEN API는 국세청 법령해석 목록만 제공 — 예규 원문 인용이 불가능했음.
+  세무 검토서 작성 시 예규 본문 인용이 필수 (임원 중간정산 검증에서 발견)
+- **건드린 파일**:
+  - `src/tools/nts-body.ts` (신규) + `src/tools/nts-body.test.ts` (신규)
+  - `src/tools/unified-decisions.ts` (import 1줄 + GET_HANDLERS.nts 1줄만)
+- **참고**: id는 검색 결과 링크의 `ntstDcmId`(법제처 일련번호와 별개).
+  링크/원시값 허용, 짧은 숫자는 ID_MISMATCH 안내. precedents.ts의 비공개 헬퍼를
+  복제(직접 수정 금지 — upstream 활발 변경 파일)
+- **upstream PR 가능 여부**: 가능 (Phase 2 안정화 후 재판단 — 계획서 §결정 대기)
+- **검증 방법**: `ntstDcmId=010000000000515153` 조회 → 제목 "무주택 임원 퇴직금
+  중간정산 가능 여부", 문서번호 법인세과-352, 회신일자 20130716, 본문 4천자+
 
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)

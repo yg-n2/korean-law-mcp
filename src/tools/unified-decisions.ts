@@ -18,8 +18,9 @@ import { searchInterpretations, getInterpretationText } from "./interpretations.
 import { searchTaxTribunalDecisions, getTaxTribunalDecisionText } from "./tax-tribunal-decisions.js"
 import {
   searchCustomsInterpretations, getCustomsInterpretationText,
-  searchNtsInterpretations, getNtsInterpretationText,
+  searchNtsInterpretations,
 } from "./customs-interpretations.js"
+import { getNtsDecisionBody } from "./nts-body.js" // N2 자체 패치 #1: 예규 본문 조회
 import { searchConstitutionalDecisions, getConstitutionalDecisionText } from "./constitutional-decisions.js"
 import { searchAdminAppeals, getAdminAppealText } from "./admin-appeals.js"
 import {
@@ -107,7 +108,7 @@ const GET_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<Loo
   interpretation: getInterpretationText,
   tax_tribunal: getTaxTribunalDecisionText,
   customs: getCustomsInterpretationText,
-  nts: getNtsInterpretationText,
+  nts: getNtsDecisionBody, // N2 자체 패치 #1: NOT_SUPPORTED → taxlaw.nts.go.kr 본문 조회
   constitutional: getConstitutionalDecisionText,
   admin_appeal: getAdminAppealText,
   ftc: getFtcDecisionText,
