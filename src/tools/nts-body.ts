@@ -23,22 +23,31 @@ export const GetNtsDecisionBodySchema = z.object({
   id: z.string().describe(
     "search_decisions(domain='nts') 결과의 링크(taxlaw.nts.go.kr …ntstDcmId=…) 또는 ntstDcmId 값"
   ),
-  apiKey: z.string().optional(),
+  apiKey: z.string().optional().describe(
+    "미사용 — 국세청 공개 엔드포인트 직접 조회라 법제처 OC 키가 필요 없음 (타 도메인과의 인터페이스 호환용)"
+  ),
 })
 
 export type GetNtsDecisionBodyInput = z.infer<typeof GetNtsDecisionBodySchema>
 
 /**
  * id 입력에서 ntstDcmId 추출.
- * - taxlaw.nts.go.kr 링크 → 쿼리스트링에서 추출
+ * - taxlaw.nts.go.kr 링크(호스트 검증) → 쿼리스트링에서 추출 (전체 숫자만 인정)
  * - 12자리 이상 숫자 → ntstDcmId로 간주 (예: 010000000000515153)
- * - 그 외(법제처 일련번호 등) → null (자동 변환 불가)
+ * - 그 외(법제처 일련번호, 타 호스트 URL 등) → null (자동 변환 불가)
  */
 export function parseNtstDcmId(id: string): string | null {
   const raw = String(id).trim()
-  const fromUrl = raw.match(/[?&]ntstDcmId=(\d+)/)?.[1]
-  if (fromUrl) return fromUrl
   if (/^\d{12,}$/.test(raw)) return raw
+  try {
+    const url = new URL(raw)
+    if (url.hostname === "taxlaw.nts.go.kr") {
+      const value = url.searchParams.get("ntstDcmId") ?? ""
+      if (/^\d{12,}$/.test(value)) return value
+    }
+  } catch {
+    // URL 형식이 아님 — 아래에서 null 반환
+  }
   return null
 }
 
@@ -147,19 +156,23 @@ export async function getNtsDecisionBody(
     const actionJson = await fetchTaxlawAction(ntstDcmId, detailUrl)
     const actionData = actionJson?.data?.ASIQTB002PR01
     const dcm = actionData?.dcmDVO
-    if (!dcm) {
-      throw new Error("응답에 dcmDVO가 없음 — ntstDcmId가 유효한지 확인 필요")
+    if (!dcm || typeof dcm !== "object" || Array.isArray(dcm)) {
+      throw new Error("응답에 정상적인 dcmDVO가 없음 — ntstDcmId가 유효한지 확인 필요")
     }
 
-    const title = typeof dcm.ntstDcmTtl === "string" ? dcm.ntstDcmTtl.trim() : ""
+    // 문자열·숫자만 통과 (malformed 응답의 [object Object] 출력 방지)
+    const asText = (v: unknown): string =>
+      typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : ""
+
+    const title = asText(dcm.ntstDcmTtl)
     const gist = normalizeTaxlawBodyCandidate(dcm.ntstDcmGistCntn)
     const body = extractTaxlawEditorBody(actionData) || normalizeTaxlawBodyCandidate(dcm.ntstDcmCntn)
 
     let output = `=== ${title || "국세청 문서"} ===\n\n`
-    output += `문서번호: ${dcm.ntstDcmDscmCntn || "N/A"}\n`
-    output += `회신일자: ${dcm.ntstDcmRgtDt || "N/A"}\n`
-    output += `기관: ${dcm.ogzNm || "국세청"}\n`
-    output += `유형: ${dcm.ntstDcmClNm || "N/A"}\n\n`
+    output += `문서번호: ${asText(dcm.ntstDcmDscmCntn) || "N/A"}\n`
+    output += `회신일자: ${asText(dcm.ntstDcmRgtDt) || "N/A"}\n`
+    output += `기관: ${asText(dcm.ogzNm) || "국세청"}\n`
+    output += `유형: ${asText(dcm.ntstDcmClNm) || "N/A"}\n\n`
     if (gist) output += `요지:\n${gist}\n\n`
     if (body) {
       output += `본문:\n${body}\n\n`
