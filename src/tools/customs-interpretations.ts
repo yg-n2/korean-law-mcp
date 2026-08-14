@@ -73,6 +73,9 @@ async function searchCgmExpcByTarget(
       (content) => ({
         법령해석일련번호: extractTag(content, "법령해석일련번호"),
         안건명: extractTag(content, "안건명"),
+        // N2 패치 #3: 안건번호(문서번호, 예: 재부가46015-182)는 응답에 오는데 버려지고
+        // 있었다 — 예규 인용에 필수라 목록에 표기한다 (docs/N2-PATCHES.md)
+        안건번호: extractTag(content, "안건번호"),
         질의기관코드: extractTag(content, "질의기관코드"),
         질의기관명: extractTag(content, "질의기관명"),
         해석기관코드: extractTag(content, "해석기관코드"),
@@ -92,6 +95,9 @@ async function searchCgmExpcByTarget(
 
     for (const expc of expcs) {
       output += `[${expc.법령해석일련번호}] ${expc.안건명}\n`;
+      if (expc.안건번호) {
+        output += `  문서번호: ${expc.안건번호}\n`;
+      }
       output += `  질의기관: ${expc.질의기관명 || "N/A"}\n`;
       output += `  해석기관: ${expc.해석기관명 || "N/A"}\n`;
       output += `  해석일자: ${expc.해석일자 || "N/A"}\n`;
