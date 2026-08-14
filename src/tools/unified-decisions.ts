@@ -38,6 +38,7 @@ import { searchTreaties, getTreatyText } from "./treaties.js"
 import { searchEnglishLaw, getEnglishLawText } from "./english-law.js"
 import { searchPrecedentsStructured } from "./precedent-search-core.js"
 import { fetchPrecedentEvidence, validatePrecedentSearchResult } from "./precedent-evidence.js"
+import { withCompactFallback } from "./decision-search-fallback.js"
 
 // ========================================
 // Domain enum & config
@@ -77,10 +78,12 @@ const DOMAIN_LABELS: Record<Domain, string> = {
 // Search handler dispatch table
 const SEARCH_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<LooseToolResponse>> = {
   precedent: searchPrecedents,
-  interpretation: searchInterpretations,
-  tax_tribunal: searchTaxTribunalDecisions,
+  // N2 패치 #5: 예규·해석례·조세심판은 0건 시 축약 재검색 사다리 적용
+  // (판례는 precedent-search-core가 자체 폴백 보유)
+  interpretation: withCompactFallback(searchInterpretations),
+  tax_tribunal: withCompactFallback(searchTaxTribunalDecisions),
   customs: searchCustomsInterpretations,
-  nts: searchNtsInterpretations,
+  nts: withCompactFallback(searchNtsInterpretations),
   constitutional: searchConstitutionalDecisions,
   admin_appeal: searchAdminAppeals,
   ftc: searchFtcDecisions,
