@@ -125,6 +125,26 @@ describe("passesRelevanceGate", () => {
     expect(passesRelevanceGate(relevantBody, hit, result)).toBe(true)
   })
 
+  it("구어체 의문 어미는 대조 기준에서 제외한다 (Opus 차단 2 회귀 방지)", () => {
+    const hit = makeHit({ sourceQuery: "식대 비과세 되나요" })
+    expect(gateTermGroupsForHit(hit, makeResult())).toEqual([["식대"], ["비과세"]])
+    const body = "사용자가 근로자에게 지급한 식대는 월 20만원까지 비과세 근로소득에 해당한다"
+    expect(passesRelevanceGate(body, hit, makeResult())).toBe(true)
+  })
+
+  it("짧은 원 질의의 구어체 어미도 제외된다", () => {
+    const hit = makeHit({ sourceQuery: "퇴직금" })
+    const groups = gateTermGroupsForHit(hit, withOriginalQuery("퇴직금 중간정산 가능한가요"))
+    expect(groups).toEqual([["퇴직금"], ["중간정산"]])
+  })
+
+  it("사건번호 지정 조회(검색어 없는 검색)는 게이트를 적용하지 않는다 (Opus 권고 4)", () => {
+    const hit = makeHit() // sourceQuery 없음 + 성공 시도 query 없음 = 사건번호 조회
+    const result = withOriginalQuery("판매후리스")
+    expect(gateTermGroupsForHit(hit, result)).toEqual([])
+    expect(passesRelevanceGate("판매후리스와 무관한 본문", hit, result)).toBe(true)
+  })
+
   it("hit에 검색어가 없으면 성공 시도의 query로 폴백해 대조한다", () => {
     const attempt = {
       query: "부당행위계산부인",

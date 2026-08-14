@@ -35,10 +35,12 @@ async function findAdminRule(
   name: string,
   apiKey?: string
 ): Promise<AdminRuleMatch | null> {
-  const xml = await apiClient.searchAdminRule({ query: name, apiKey })
+  // display=100 (Opus 검토 권고 7): 법제처는 LIKE 부분검색+가나다순이라 정확한 규칙명이
+  // 기본 20건 밖으로 밀릴 수 있다 — 법령 경로의 findLaws display=100과 같은 이유
+  const xml = await apiClient.searchAdminRule({ query: name, display: "100", apiKey })
   const doc = new DOMParser().parseFromString(xml, "text/xml")
   const rules = doc.getElementsByTagName("admrul")
-  const limit = Math.min(rules.length, 10)
+  const limit = Math.min(rules.length, 100)
   for (let i = 0; i < limit; i++) {
     const rule = rules[i]
     const ruleName = rule.getElementsByTagName("행정규칙명")[0]?.textContent?.trim() || ""

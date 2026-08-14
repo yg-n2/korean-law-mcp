@@ -82,7 +82,7 @@ const SEARCH_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<
   // (판례는 precedent-search-core가 자체 폴백 보유)
   interpretation: withCompactFallback(searchInterpretations),
   tax_tribunal: withCompactFallback(searchTaxTribunalDecisions),
-  customs: searchCustomsInterpretations,
+  customs: withCompactFallback(searchCustomsInterpretations), // nts와 같은 구현 — 동작 일관성
   nts: withCompactFallback(searchNtsInterpretations),
   constitutional: searchConstitutionalDecisions,
   admin_appeal: searchAdminAppeals,
