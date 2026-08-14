@@ -32,6 +32,29 @@
 - **검증 방법**: `ntstDcmId=010000000000515153` 조회 → 제목 "무주택 임원 퇴직금
   중간정산 가능 여부", 문서번호 법인세과-352, 회신일자 20130716, 본문 4천자+
 
+### 2. 무관 판례 전문 자동첨부 게이트 (2026-08-14)
+- **무엇을**: chain(full_research·dispute_prep·document_review)과
+  `search_decisions(precedent, includeText)`가 상위 판례 전문을 자동 첨부하기 전에
+  본문을 검색 취지와 대조, 무관하면 전문 대신 안내 문구만 남김 (opt-in `relevanceGate`)
+- **왜**: 최초 검색이 hit>0이면 기존 validateResult가 아예 호출되지 않아
+  (requiresResultValidation 미설정) 무관 판결문 전문이 통째로 붙었음.
+  실측: 판매후리스 질문에 금지금·마스크 가공세금계산서 판결문 2건 전문 첨부
+  (삼일 Tax Agent 비교 분석에서 발견, 2026-08-13)
+- **건드린 파일**:
+  - `src/tools/precedent-relevance-gate.ts` (신규) + `.test.ts` (신규, 12케이스)
+  - `src/tools/precedent-evidence.ts` (옵션 `relevanceGate`·`gated` 필드 + 게이트 적용 + 렌더링)
+  - `src/tools/chains.ts` 2곳, `src/tools/unified-decisions.ts` 1곳 (relevanceGate: true 플래그만)
+- **대조 기준**: hit을 찾은 검색어(sourceQuery·semanticAnchor) 토큰 AND + **원 질의
+  변별 토큰** (3어절 이하=원문 토큰, 긴 자연어=compact-query-planner 핵심 키워드).
+  폴백이 검색어를 일반어로 완화해 잡은 무관 hit까지 차단하기 위함.
+  기준을 만들 수 없으면 게이트 미적용(기존 동작). 검증 경로
+  (validatePrecedentSearchResult의 1건 조회)는 원본 본문이 필요하므로 게이트 제외
+- **upstream PR 가능 여부**: 가능 (동작이 보수적·opt-in이라 부담 낮음. Codex 검토 후 재판단)
+- **검증 방법**: E2E — legal_research(full_research, tax, "판매후리스 거래에서 세금계산서
+  발급 시 공급자와 공급받는 자는 누구인가") → "관련성 미확인 2건 전문 생략" +
+  출력 7,693→4,725자. 대조군 search_decisions(precedent, includeText,
+  "부당행위계산부인") → 관련 전문 정상 첨부(오차단 없음). vitest 199 통과
+
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)
 - **무엇을**: 
