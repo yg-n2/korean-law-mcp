@@ -171,6 +171,7 @@ async function searchPrecedentDecisionsWithText(
     apiKey,
     detailLimit,
     full: false,
+    relevanceGate: true, // N2 패치 #2: 무관 판례 전문 자동첨부 차단
   })
   const text = evidence ? `${listText}\n\n▶ 관련 판례 상세\n${evidence.text}` : listText
 

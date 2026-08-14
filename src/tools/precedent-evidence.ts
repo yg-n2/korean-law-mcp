@@ -6,6 +6,7 @@ import type {
   PrecedentSearchValidationInput,
   StructuredPrecedentSearchResult,
 } from "./precedent-search-core.js"
+import { passesRelevanceGate } from "./precedent-relevance-gate.js"
 
 export const DEFAULT_PRECEDENT_DETAIL_LIMIT = 2
 export const MAX_PRECEDENT_DETAIL_LIMIT = 5
@@ -19,6 +20,9 @@ export interface PrecedentEvidenceOptions {
   apiKey?: string
   detailLimit?: number
   full?: boolean
+  // N2 패치 #2: true면 상세 본문을 검색어와 대조해 무관 판례의 전문 첨부를 차단.
+  // 검증 경로(validatePrecedentSearchResult)는 원본 본문이 필요하므로 켜지 말 것.
+  relevanceGate?: boolean
 }
 
 export interface PrecedentEvidenceItem {
@@ -26,6 +30,7 @@ export interface PrecedentEvidenceItem {
   text: string
   isError: boolean
   detailError?: string
+  gated?: boolean
 }
 
 export interface PrecedentEvidenceResult {
@@ -114,6 +119,9 @@ function renderEvidenceItem(item: PrecedentEvidenceItem): string {
   if (item.isError) {
     return `[${item.hit.id}]${title}\n상세조회 실패: ${item.detailError || "원인을 확인할 수 없습니다."}`
   }
+  if (item.gated) {
+    return `[${item.hit.id}]${title}\n(관련성 미확인 — 본문이 검색어와 대조되지 않아 전문 첨부를 생략했습니다. 필요 시 get_precedent_text(id=${item.hit.id})로 직접 조회하세요.)`
+  }
   return `[${item.hit.id}]${title}\n${item.text || "상세조회 결과가 비어 있습니다."}`
 }
 
@@ -188,6 +196,19 @@ export async function fetchPrecedentEvidence(
   )
   const failures = items.filter(item => item.isError).length
 
+  // N2 패치 #2: 관련성 게이트 (opt-in) — 본문이 검색 취지와 대조 실패하면 전문을 버린다.
+  let gatedCount = 0
+  if (options.relevanceGate) {
+    for (const item of items) {
+      if (item.isError || !item.text) continue
+      if (!passesRelevanceGate(item.text, item.hit, searchResult)) {
+        item.gated = true
+        item.text = ""
+        gatedCount++
+      }
+    }
+  }
+
   // 성공 항목 본문에만 건당 예산을 균등 배분 (실패 항목은 짧은 안내라 제외).
   const successCount = items.filter(item => !item.isError && item.text).length
   if (successCount > 0) {
@@ -197,8 +218,10 @@ export async function fetchPrecedentEvidence(
     }
   }
 
+  const header = renderHeader(items.length, options.full ?? false)
+    + (gatedCount > 0 ? ` — 관련성 미확인 ${gatedCount}건 전문 생략` : "")
   const blocks = [
-    renderHeader(items.length, options.full ?? false),
+    header,
     ...items.map(renderEvidenceItem),
   ]
 

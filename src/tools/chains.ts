@@ -292,6 +292,7 @@ async function searchPrecedentsForChain(
     apiKey: input.apiKey,
     detailLimit,
     full: false,
+    relevanceGate: true, // N2 패치 #2: 무관 판례 전문 자동첨부 차단
   })
 
   return {
@@ -1061,6 +1062,7 @@ export async function chainDocumentReview(
         apiKey: input.apiKey,
         detailLimit: 2,
         full: false,
+        relevanceGate: true, // N2 패치 #2: 무관 판례 전문 자동첨부 차단
       })
       if (precedentEvidence) {
         parts.push(secOrSkip("관련 판례 상세", {
