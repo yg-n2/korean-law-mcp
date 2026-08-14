@@ -45,6 +45,23 @@ describe("parseCitations 행정규칙 추출 (접미사 확장)", () => {
     const cites = parseCitations("법인세법 제19조에 따른 손금", 15)
     expect(cites[0].lawName).toBe("법인세법")
   })
+
+  it("행정규칙 캡처는 '같은 법' 조응의 선행사가 되지 않는다 (Opus 차단 1 회귀 방지)", () => {
+    const text =
+      "법인세법 제19조의2에 따른 대손금은 인정된다. 국세청의 실무 판단 기준 제3조도 참고한다. " +
+      "같은 법 시행령 제19조의2 제1항도 확인하라."
+    const cites = parseCitations(text, 15)
+    expect(cites).toHaveLength(3)
+    expect(cites[0].lawName).toBe("법인세법")
+    expect(cites[1].lawName).toBe("국세청의 실무 판단 기준")
+    expect(cites[2].lawName).toBe("법인세법 시행령") // '판단 기준 시행령'이 되면 회귀
+  })
+
+  it("산문 '기준' 캡처 뒤 '같은 법' 단독 조응도 법령으로 해소된다", () => {
+    const text = "소득세법 제12조에 따라 비과세된다. 회사 내부 지급 기준 제2조 참조. 같은 법 제20조도 본다."
+    const cites = parseCitations(text, 15)
+    expect(cites[2].lawName).toBe("소득세법")
+  })
 })
 
 describe("tryVerifyAdminRuleCitation", () => {

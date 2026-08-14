@@ -183,7 +183,10 @@ export function parseCitations(text: string, maxCitations: number): ParsedCitati
       antecedentEnd = m.index
     } else {
       lawName = lawNameFromCitationContext(lookback)
-      if (lawName) {
+      // N2 패치 #4 보완(Opus 검토 차단 1): 행정규칙(고시·기준 등) 캡처는 '같은 법' 조응의
+      // 선행사가 될 수 없다 — 산문 어구("판단 기준")가 antecedent를 덮어쓰면 뒤따르는
+      // "같은 법 시행령"이 엉뚱한 이름으로 해소되어 정상 인용을 오판정한다.
+      if (lawName && !isAdminRuleName(lawName)) {
         antecedent = lawName
         antecedentEnd = m.index
       }

@@ -32,9 +32,23 @@ function containsEveryTermGroup(text: string, groups: string[][]): boolean {
   return groups.every(group => containsAnyTerm(text, group))
 }
 
+// 의문·구어체 토큰 제외 (Opus 검토 차단 2): "되나요"·"어떻게" 같은 어미가 AND 조건이
+// 되면 판결문 본문에 존재할 수 없어 정답 판례까지 전량 차단된다. 제외는 요구 토큰을
+// 줄이는 방향이라 오차단을 만들지 않는다 (제외 후 토큰이 없으면 게이트 미적용).
+const STOP_TOKENS = new Set([
+  "어떻게", "무엇", "뭐", "누구", "언제", "어디", "왜", "얼마", "얼마나",
+  "알려줘", "알려주세요", "해줘", "해주세요", "궁금해요", "궁금합니다", "여부",
+])
+const STOP_ENDINGS = /(되나요|하나요|인가요|한가요|할까요|될까요|입니까|합니까|됩니까|는지|한지|인지|주세요|해줘)$/
+
+function isStopToken(token: string): boolean {
+  return STOP_TOKENS.has(token) || STOP_ENDINGS.test(token)
+}
+
 function collectTokens(source: string | undefined, into: Set<string>): void {
   if (typeof source !== "string") return
   for (const token of source.split(/\s+/)) {
+    if (isStopToken(token)) continue
     if (normalizeRelevanceText(token).length >= 2) into.add(token)
   }
 }
@@ -74,6 +88,11 @@ export function gateTermGroupsForHit(
   hit: PrecedentHit,
   searchResult: StructuredPrecedentSearchResult
 ): string[][] {
+  const attempt = searchResult.successfulAttempt
+  // 사건번호 지정 조회(검색어 없는 검색)로 찾은 hit은 사용자가 특정한 판례다 —
+  // 원 질의 토큰만으로 대조하면 지정 판례의 전문이 사라진다 (Opus 검토 권고 4). 게이트 미적용.
+  if (!hit.sourceQuery && !attempt?.query) return []
+
   const groups: string[][] = []
   const seen = new Set<string>()
   const push = (group: string[]) => {
@@ -84,7 +103,6 @@ export function gateTermGroupsForHit(
     }
   }
 
-  const attempt = searchResult.successfulAttempt
   const explicit =
     attempt?.validationTermGroups?.length && (!hit.sourceQuery || hit.sourceQuery === attempt.query)
       ? attempt.validationTermGroups

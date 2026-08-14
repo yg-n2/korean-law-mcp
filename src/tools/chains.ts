@@ -1058,7 +1058,13 @@ export async function chainDocumentReview(
 
     const combinedPrecedents = combineStructuredPrecedentResults(precedentResults)
     if (combinedPrecedents) {
-      const precedentEvidence = await fetchPrecedentEvidence(apiClient, combinedPrecedents, {
+      // N2 패치 #2 보완(Opus 검토 권고 3): 병합 결과의 originalArgs는 첫 힌트 것이라
+      // 원 질의 대조가 다른 힌트로 찾은 판례를 오차단한다 — hit별 sourceQuery 대조만 적용
+      const gateSafeCombined = {
+        ...combinedPrecedents,
+        originalArgs: { ...combinedPrecedents.originalArgs, query: undefined },
+      }
+      const precedentEvidence = await fetchPrecedentEvidence(apiClient, gateSafeCombined, {
         apiKey: input.apiKey,
         detailLimit: 2,
         full: false,

@@ -288,6 +288,7 @@ export class LawApiClient {
     knd?: string
     apiKey?: string
     nw?: string // 1=현행(기본), 2=연혁 — 폐지·개정 전 이력 포함
+    display?: string // 결과 수 (기본 20) — N2 패치 #4: 인용 검증은 100 필요 (가나다순 밀림 대비)
   }): Promise<string> {
     const apiParams = new URLSearchParams({
       OC: this.getApiKey(params.apiKey),
@@ -298,6 +299,7 @@ export class LawApiClient {
 
     if (params.knd) apiParams.append("knd", params.knd)
     if (params.nw) apiParams.append("nw", params.nw)
+    if (params.display) apiParams.append("display", params.display)
 
     const url = `${LAW_API_BASE}/lawSearch.do?${apiParams.toString()}`
     const response = await fetchWithRetry(url, DRF_RETRY)
