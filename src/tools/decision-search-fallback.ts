@@ -46,7 +46,12 @@ export function withCompactFallback(handler: SearchHandler): SearchHandler {
         // API 오류는 사다리를 중단하고 원 결과(NOT_FOUND 힌트)를 반환 — 오류 은폐 금지
         break
       }
-      if (res.isError) continue
+      // NOT_FOUND만 다음 단계로 재시도 (Codex 검토 차단 2): 429·타임아웃 등 다른 오류에
+      // 사다리를 계속 타면 rate limit을 더 소진하고 오류를 은폐한다 — throw 경로와 동일하게 중단
+      if (res.isError) {
+        if (isNotFound(res)) continue
+        break
+      }
 
       const note =
         `⚠ 검색어 축약 재검색: '${query}'는 0건이라 '${retry}'(으)로 재시도한 결과입니다.\n` +

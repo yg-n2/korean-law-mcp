@@ -138,6 +138,34 @@ describe("passesRelevanceGate", () => {
     expect(groups).toEqual([["퇴직금"], ["중간정산"]])
   })
 
+  it("문장부호가 붙은 구어체 어미도 제외한다 (Codex 차단 1 회귀 방지)", () => {
+    const hit = makeHit({ sourceQuery: "식대 비과세 되나요?" })
+    expect(gateTermGroupsForHit(hit, makeResult())).toEqual([["식대"], ["비과세"]])
+    const body = "사용자가 근로자에게 지급한 식대는 월 20만원까지 비과세 근로소득에 해당한다"
+    expect(passesRelevanceGate(body, hit, makeResult())).toBe(true)
+  })
+
+  it("짧은 원 질의의 부호 붙은 어미도 제외된다", () => {
+    const hit = makeHit({ sourceQuery: "퇴직금" })
+    const groups = gateTermGroupsForHit(hit, withOriginalQuery("퇴직금 중간정산 가능한가요?"))
+    expect(groups).toEqual([["퇴직금"], ["중간정산"]])
+  })
+
+  it("validationTermGroups 경로에서도 구어체 토큰은 제외된다 (Codex 권고 1)", () => {
+    const attempt = {
+      query: "판매후리스",
+      search: 1 as const,
+      reason: "test",
+      totalCount: 1,
+      hitCount: 1,
+      success: true,
+      validationTermGroups: [["판매후리스"], ["되나요?"]],
+    }
+    const hit = makeHit({ sourceQuery: "판매후리스" })
+    const groups = gateTermGroupsForHit(hit, makeResult({ successfulAttempt: attempt as never }))
+    expect(groups).toEqual([["판매후리스"]])
+  })
+
   it("사건번호 지정 조회(검색어 없는 검색)는 게이트를 적용하지 않는다 (Opus 권고 4)", () => {
     const hit = makeHit() // sourceQuery 없음 + 성공 시도 query 없음 = 사건번호 조회
     const result = withOriginalQuery("판매후리스")

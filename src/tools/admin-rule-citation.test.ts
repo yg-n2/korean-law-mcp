@@ -102,3 +102,28 @@ describe("verifyAdminRuleCitation", () => {
     expect(result.startsWith("⚠")).toBe(true)
   })
 })
+
+describe("장애 응답 판별 (Codex 차단 3 회귀 방지)", () => {
+  const HTML_ERROR = "<!DOCTYPE html><html><body>시스템 점검 중입니다</body></html>"
+
+  it("200 상태의 HTML 오류 페이지는 ✗가 아니라 ⚠(판정 불가)로 보고한다", async () => {
+    const result = await verifyAdminRuleCitation(
+      stubClient(HTML_ERROR), ["존재하지않는국세청고시"], "라벨D", "존재하지않는국세청고시"
+    )
+    expect(result.startsWith("⚠")).toBe(true)
+    expect(result).toContain("HTML 오류 페이지")
+    expect(result).not.toContain("NOT_FOUND")
+  })
+
+  it("빈 응답도 ⚠(판정 불가)로 보고한다", async () => {
+    const result = await verifyAdminRuleCitation(stubClient("  "), ["아무고시"], "라벨E", "아무고시")
+    expect(result.startsWith("⚠")).toBe(true)
+    expect(result).toContain("빈 응답")
+  })
+
+  it("tryVerify 경로는 throw로 전파한다 (호출자 catch가 ⚠ 또는 기존 경로 유지 처리)", async () => {
+    await expect(
+      tryVerifyAdminRuleCitation(stubClient(HTML_ERROR), ["아무고시"], "라벨")
+    ).rejects.toThrow("HTML 오류 페이지")
+  })
+})

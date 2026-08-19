@@ -64,6 +64,20 @@ describe("withCompactFallback", () => {
     expect(calls).toHaveLength(1)
   })
 
+  it("재시도 중 NOT_FOUND 아닌 오류가 나면 사다리를 중단하고 원 결과를 반환한다 (Codex 차단 2 회귀 방지)", async () => {
+    const calls: string[] = []
+    const wrapped = withCompactFallback(async (_api, args) => {
+      calls.push(args.query)
+      if (calls.length === 1) return notFound(args.query)
+      return { content: [{ type: "text", text: "[ERROR] API 요청 한도 초과 (429)" }], isError: true }
+    })
+    const res = await wrapped(API, { query: "판매후리스 세금계산서 공급자" })
+    // 429 뒤 첫 어절("판매후리스") 재시도까지 가면 안 된다 — 쿼터 소진·오류 은폐 방지
+    expect(calls).toEqual(["판매후리스 세금계산서 공급자", "판매후리스 세금계산서"])
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toContain("[NOT_FOUND] '판매후리스 세금계산서 공급자'")
+  })
+
   it("재시도 중 예외가 나면 사다리를 중단하고 원 결과를 반환한다 (오류 은폐 금지)", async () => {
     let first = true
     const wrapped = withCompactFallback(async (_api, args) => {

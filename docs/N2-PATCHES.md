@@ -122,6 +122,27 @@
   ⑧ `…규정` admrul 폴백은 법령 검색이 완전 0건일 때만 발동 (부분매칭 ⚠가 먼저 잡으면 미발동)
 - 회귀 테스트 5건 추가, vitest 224 통과. E2E 3종(게이트·행정규칙·사다리) 재실행 무회귀 확인
 
+### 검토 반영 (2026-08-19, Codex 교차검토 — 판정 "수정 후 배포" → 소스 실측으로 3건 전부 진성 확인, 수정 완료)
+- 검토 입력은 diff 텍스트만(Codex 셸 차단 환경) — 차단 3건을 소스 실측으로 재검증한 뒤 수정
+- **차단 1 수정**: 문장부호가 붙은 구어체 토큰("되나요?")이 STOP_ENDINGS `$` 앵커에
+  미매칭 → AND 조건 잔류 → 정상 판례 오차단. `isStopToken`이 문자·숫자 외 문자를 벗긴
+  bare 토큰으로 비교하도록 수정 (precedent-relevance-gate.ts)
+- **차단 2 수정**: 축약 사다리가 NOT_FOUND 아닌 오류 응답(429 등)에도 `continue`로
+  다음 단계 재시도 — 설계("NOT_FOUND만 재시도")와 불일치, 쿼터 소진·오류 은폐.
+  NOT_FOUND만 계속, 그 외 오류는 throw 경로와 동일하게 사다리 중단
+  (decision-search-fallback.ts)
+- **차단 3 수정**: `searchAdminRule`은 `searchLaw`와 달리 HTML/빈 응답 검사가 없어
+  200 상태의 장애 페이지가 "admrul 0건" 파싱 → ✗ NOT_FOUND(환각 의심)로 오보.
+  `findAdminRule`에서 빈 응답·HTML·documentElement 부재를 throw로 판별해
+  기존 catch의 ⚠(판정 불가) 경로에 태움 (admin-rule-citation.ts)
+- **권고 1 수정**: validationTermGroups 우선 경로에도 구어체 불용어 필터 적용
+  (제외로 그룹이 비면 그룹째 탈락 — 게이트 완화 방향이라 오차단 없음)
+- **권고 2 문서화 수용 (코드 무변경)**: 외부 XML 크기 제한은 upstream 패턴과 동일
+  (fetchWithRetry 30초 타임아웃, 응답 크기 제한은 upstream 전반에 부재 — 별도 도입 안 함).
+  타입 검사는 차단 3 수정의 HTML/빈 응답 판별로 해소
+- **참고 (조치 없음)**: detectAbolishedAdminRule 재사용은 충돌 없음 (Codex도 동일 판단)
+- 회귀 테스트 7건 추가, vitest 231 통과
+
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)
 - **무엇을**: 
