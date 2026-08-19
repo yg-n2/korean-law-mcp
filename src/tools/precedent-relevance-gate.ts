@@ -39,14 +39,17 @@ const STOP_TOKENS = new Set([
   "어떻게", "무엇", "뭐", "누구", "언제", "어디", "왜", "얼마", "얼마나",
   "알려줘", "알려주세요", "해줘", "해주세요", "궁금해요", "궁금합니다", "여부",
 ])
-const STOP_ENDINGS = /(되나요|하나요|인가요|한가요|할까요|될까요|입니까|합니까|됩니까|는지|한지|인지|주세요|해줘)$/
+const STOP_ENDINGS = /(되나요|하나요|인가요|한가요|할까요|될까요|입니까|합니까|됩니까|주세요|해줘)$/
+// 는지·한지·인지는 단독으로 실질 검색어일 수 있어(예: "인지" 청구) 접두부가 있을 때만
+// 어미로 간주한다 (Codex 재검토 권고 2 — 게이트 정밀도 보전)
+const STOP_AMBIGUOUS_ENDINGS = /.(는지|한지|인지)$/
 
 function isStopToken(token: string): boolean {
   // 문장부호를 벗겨 비교 (Codex 검토 차단 1): "되나요?"처럼 부호가 붙으면 어미 매칭이
   // 빗나가 구어체 토큰이 AND 조건으로 남는다 — normalizeRelevanceText가 본문 대조 시
   // 부호를 제거하므로 대조 불가능한 토큰이 되어 정상 판례까지 차단된다
   const bare = token.replace(/[^\p{L}\p{N}]+/gu, "")
-  return STOP_TOKENS.has(bare) || STOP_ENDINGS.test(bare)
+  return STOP_TOKENS.has(bare) || STOP_ENDINGS.test(bare) || STOP_AMBIGUOUS_ENDINGS.test(bare)
 }
 
 function collectTokens(source: string | undefined, into: Set<string>): void {

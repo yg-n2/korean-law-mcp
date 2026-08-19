@@ -44,12 +44,19 @@ async function findAdminRule(
   if (!xml || !xml.trim()) {
     throw new Error("법제처 API가 빈 응답을 반환했습니다 (일시 장애 가능) — 실존 여부 판정 불가")
   }
-  if (xml.includes("<!DOCTYPE html") || xml.includes("<html")) {
+  // 대소문자 무시 (Codex 재검토 차단 2): <HTML>·<!DOCTYPE HTML> 변형도 장애 페이지다
+  if (/<!doctype\s+html|<html[\s>]/i.test(xml)) {
     throw new Error("법제처 API가 HTML 오류 페이지를 반환했습니다 (일시 장애 가능) — 실존 여부 판정 불가")
   }
   const doc = new DOMParser().parseFromString(xml, "text/xml")
-  if (!doc?.documentElement) {
+  // 기대 루트 검증: 정상 검색 응답의 루트는 AdmRulSearch (2026-08-19 실호출로 확인).
+  // <error> 등 정상 형식의 오류 XML이 "0건"으로 읽히는 것을 막는다
+  const rootName = doc?.documentElement?.nodeName
+  if (!rootName) {
     throw new Error("법제처 API 응답 XML 파싱 실패 — 실존 여부 판정 불가")
+  }
+  if (rootName !== "AdmRulSearch") {
+    throw new Error(`법제처 API가 예상 밖 응답(루트 ${rootName})을 반환했습니다 — 실존 여부 판정 불가`)
   }
   const rules = doc.getElementsByTagName("admrul")
   const limit = Math.min(rules.length, 100)

@@ -151,6 +151,14 @@ describe("passesRelevanceGate", () => {
     expect(groups).toEqual([["퇴직금"], ["중간정산"]])
   })
 
+  it("접두부 있는 는지·한지·인지 어미는 제외하되 단독 토큰은 검색어로 유지한다 (Codex 재검토 권고 2)", () => {
+    const excluded = makeHit({ sourceQuery: "비과세 대상 무엇인지" })
+    expect(gateTermGroupsForHit(excluded, makeResult())).toEqual([["비과세"], ["대상"]])
+    // "인지"는 단독으로 실질 검색어일 수 있다 (인지 청구 등) — 어미 취급 금지
+    const kept = makeHit({ sourceQuery: "인지 청구" })
+    expect(gateTermGroupsForHit(kept, makeResult())).toEqual([["인지"], ["청구"]])
+  })
+
   it("validationTermGroups 경로에서도 구어체 토큰은 제외된다 (Codex 권고 1)", () => {
     const attempt = {
       query: "판매후리스",
