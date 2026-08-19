@@ -42,7 +42,11 @@ const STOP_TOKENS = new Set([
 const STOP_ENDINGS = /(되나요|하나요|인가요|한가요|할까요|될까요|입니까|합니까|됩니까|는지|한지|인지|주세요|해줘)$/
 
 function isStopToken(token: string): boolean {
-  return STOP_TOKENS.has(token) || STOP_ENDINGS.test(token)
+  // 문장부호를 벗겨 비교 (Codex 검토 차단 1): "되나요?"처럼 부호가 붙으면 어미 매칭이
+  // 빗나가 구어체 토큰이 AND 조건으로 남는다 — normalizeRelevanceText가 본문 대조 시
+  // 부호를 제거하므로 대조 불가능한 토큰이 되어 정상 판례까지 차단된다
+  const bare = token.replace(/[^\p{L}\p{N}]+/gu, "")
+  return STOP_TOKENS.has(bare) || STOP_ENDINGS.test(bare)
 }
 
 function collectTokens(source: string | undefined, into: Set<string>): void {
@@ -106,7 +110,9 @@ export function gateTermGroupsForHit(
   const explicit =
     attempt?.validationTermGroups?.length && (!hit.sourceQuery || hit.sourceQuery === attempt.query)
       ? attempt.validationTermGroups
-          .map(group => Array.from(new Set(group.filter(term => normalizeRelevanceText(term).length >= 2))))
+          // 구어체 토큰 제외는 이 경로에도 적용 (Codex 검토 권고 1) — 제외로 그룹이 비면
+          // 그 그룹 요구 자체가 사라지므로 게이트를 완화하는 방향이라 오차단을 만들지 않는다
+          .map(group => Array.from(new Set(group.filter(term => !isStopToken(term) && normalizeRelevanceText(term).length >= 2))))
           .filter(group => group.length > 0)
       : []
   if (explicit.length > 0) {

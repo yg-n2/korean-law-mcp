@@ -38,7 +38,19 @@ async function findAdminRule(
   // display=100 (Opus 검토 권고 7): 법제처는 LIKE 부분검색+가나다순이라 정확한 규칙명이
   // 기본 20건 밖으로 밀릴 수 있다 — 법령 경로의 findLaws display=100과 같은 이유
   const xml = await apiClient.searchAdminRule({ query: name, display: "100", apiKey })
+  // 장애 응답 판별 (Codex 검토 차단 3): searchAdminRule은 searchLaw와 달리 HTML/빈 응답
+  // 검사가 없어 200 상태의 장애 페이지가 "admrul 0건"으로 파싱된다 — 그대로 두면
+  // '검증 불가'가 ✗ NOT_FOUND(환각 의심)로 오보되므로 throw로 ⚠ 경로에 태운다
+  if (!xml || !xml.trim()) {
+    throw new Error("법제처 API가 빈 응답을 반환했습니다 (일시 장애 가능) — 실존 여부 판정 불가")
+  }
+  if (xml.includes("<!DOCTYPE html") || xml.includes("<html")) {
+    throw new Error("법제처 API가 HTML 오류 페이지를 반환했습니다 (일시 장애 가능) — 실존 여부 판정 불가")
+  }
   const doc = new DOMParser().parseFromString(xml, "text/xml")
+  if (!doc?.documentElement) {
+    throw new Error("법제처 API 응답 XML 파싱 실패 — 실존 여부 판정 불가")
+  }
   const rules = doc.getElementsByTagName("admrul")
   const limit = Math.min(rules.length, 100)
   for (let i = 0; i < limit; i++) {
