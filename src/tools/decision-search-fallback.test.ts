@@ -64,7 +64,7 @@ describe("withCompactFallback", () => {
     expect(calls).toHaveLength(1)
   })
 
-  it("재시도 중 NOT_FOUND 아닌 오류가 나면 사다리를 중단하고 원 결과를 반환한다 (Codex 차단 2 회귀 방지)", async () => {
+  it("재시도 중 NOT_FOUND 아닌 오류가 나면 사다리를 중단하고 중단 사유를 병기한다 (Codex 차단 2 회귀 방지)", async () => {
     const calls: string[] = []
     const wrapped = withCompactFallback(async (_api, args) => {
       calls.push(args.query)
@@ -72,13 +72,17 @@ describe("withCompactFallback", () => {
       return { content: [{ type: "text", text: "[ERROR] API 요청 한도 초과 (429)" }], isError: true }
     })
     const res = await wrapped(API, { query: "판매후리스 세금계산서 공급자" })
-    // 429 뒤 첫 어절("판매후리스") 재시도까지 가면 안 된다 — 쿼터 소진·오류 은폐 방지
+    // 429 뒤 첫 어절("판매후리스") 재시도까지 가면 안 된다 — 쿼터 소진 방지
     expect(calls).toEqual(["판매후리스 세금계산서 공급자", "판매후리스 세금계산서"])
     expect(res.isError).toBe(true)
     expect(res.content[0].text).toContain("[NOT_FOUND] '판매후리스 세금계산서 공급자'")
+    // 오류를 "0건"으로 은폐하지 않는다 (Codex 재검토 차단 1) — 중단 사유가 결과에 남아야 함
+    const noteText = res.content.map(c => c.text).join("\n")
+    expect(noteText).toContain("축약 재검색('판매후리스 세금계산서') 시도가 오류로 중단됨")
+    expect(noteText).toContain("429")
   })
 
-  it("재시도 중 예외가 나면 사다리를 중단하고 원 결과를 반환한다 (오류 은폐 금지)", async () => {
+  it("재시도 중 예외가 나면 사다리를 중단하고 중단 사유를 병기한다 (오류 은폐 금지)", async () => {
     let first = true
     const wrapped = withCompactFallback(async (_api, args) => {
       if (first) { first = false; return notFound(args.query) }
@@ -87,6 +91,9 @@ describe("withCompactFallback", () => {
     const res = await wrapped(API, { query: "판매후리스 세금계산서 공급자" })
     expect(res.isError).toBe(true)
     expect(res.content[0].text).toContain("[NOT_FOUND]")
+    const noteText = res.content.map(c => c.text).join("\n")
+    expect(noteText).toContain("오류로 중단됨")
+    expect(noteText).toContain("네트워크 오류")
   })
 
   it("query가 없으면 그대로 통과한다", async () => {

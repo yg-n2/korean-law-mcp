@@ -31,6 +31,23 @@ export function compactRetryQueries(query: string): string[] {
   return out
 }
 
+/** 사다리 중단 사유를 원 결과 끝에 명시 (Codex 재검토 차단 1: 오류를 "0건"으로 은폐 금지) */
+function withLadderAbortNote(first: LooseToolResponse, retry: string, reason: string): LooseToolResponse {
+  const firstLine = reason.split("\n").find(line => line.trim())?.trim() || "원인 불명"
+  return {
+    ...first,
+    content: [
+      ...first.content,
+      {
+        type: "text",
+        text:
+          `\n⚠ 축약 재검색('${retry}') 시도가 오류로 중단됨: ${firstLine}\n` +
+          `위 0건([NOT_FOUND])은 원 검색어 기준이며, 축약 검색은 완료되지 않았습니다 — 일시 오류일 수 있으니 잠시 후 재시도하세요.`,
+      },
+    ],
+  }
+}
+
 /** 검색 핸들러를 축약 재검색 사다리로 감싼다 (search_decisions 디스패치 전용). */
 export function withCompactFallback(handler: SearchHandler): SearchHandler {
   return async (apiClient, args) => {
@@ -42,15 +59,15 @@ export function withCompactFallback(handler: SearchHandler): SearchHandler {
       let res: LooseToolResponse
       try {
         res = await handler(apiClient, { ...args, query: retry })
-      } catch {
-        // API 오류는 사다리를 중단하고 원 결과(NOT_FOUND 힌트)를 반환 — 오류 은폐 금지
-        break
+      } catch (e) {
+        // API 오류는 사다리를 중단하되, 중단 사유를 원 결과에 병기 — 오류 은폐 금지
+        return withLadderAbortNote(first, retry, e instanceof Error ? e.message : String(e))
       }
       // NOT_FOUND만 다음 단계로 재시도 (Codex 검토 차단 2): 429·타임아웃 등 다른 오류에
-      // 사다리를 계속 타면 rate limit을 더 소진하고 오류를 은폐한다 — throw 경로와 동일하게 중단
+      // 사다리를 계속 타면 rate limit을 더 소진한다 — throw 경로와 동일하게 사유 병기 후 중단
       if (res.isError) {
         if (isNotFound(res)) continue
-        break
+        return withLadderAbortNote(first, retry, res.content?.[0]?.text ?? "오류 응답")
       }
 
       const note =

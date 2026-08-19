@@ -126,4 +126,21 @@ describe("장애 응답 판별 (Codex 차단 3 회귀 방지)", () => {
       tryVerifyAdminRuleCitation(stubClient(HTML_ERROR), ["아무고시"], "라벨")
     ).rejects.toThrow("HTML 오류 페이지")
   })
+
+  it("대문자 HTML 변형(<HTML>)도 장애 페이지로 판별한다 (Codex 재검토 차단 2)", async () => {
+    const upper = "<!DOCTYPE HTML><HTML><BODY>System Maintenance</BODY></HTML>"
+    const result = await verifyAdminRuleCitation(
+      stubClient(upper), ["존재하지않는국세청고시"], "라벨F", "존재하지않는국세청고시"
+    )
+    expect(result.startsWith("⚠")).toBe(true)
+    expect(result).toContain("HTML 오류 페이지")
+  })
+
+  it("예상 밖 루트의 오류 XML(<error>)은 0건이 아니라 ⚠(판정 불가)로 보고한다", async () => {
+    const errXml = `<?xml version="1.0" encoding="UTF-8"?><error><code>SVC-001</code><msg>서비스 점검</msg></error>`
+    const result = await verifyAdminRuleCitation(stubClient(errXml), ["아무고시"], "라벨G", "아무고시")
+    expect(result.startsWith("⚠")).toBe(true)
+    expect(result).toContain("예상 밖 응답")
+    expect(result).toContain("error")
+  })
 })
