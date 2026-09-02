@@ -209,3 +209,32 @@ describe("verifyCitations — 판례 인용 검증 범위 (#93)", () => {
     expect(text).not.toContain("[HALLUCINATION_DETECTED]")
   })
 })
+
+describe("verifyCitations — 법령 미매칭 후 행정규칙 폴백의 오류 처리 (Codex 검토 2026-09-02 차단 1 회귀 방지)", () => {
+  const EMPTY_LAW_XML = `<?xml version="1.0" encoding="UTF-8"?><LawSearch><totalCnt>0</totalCnt></LawSearch>`
+  const EMPTY_ADMRUL_XML = `<?xml version="1.0" encoding="UTF-8"?><AdmRulSearch><totalCnt>0</totalCnt></AdmRulSearch>`
+  const EMPTY_PREC = `<?xml version="1.0" encoding="UTF-8"?><PrecSearch><totalCnt>0</totalCnt><page>1</page></PrecSearch>`
+  const TEXT = "「가나다관리규정」 제3조에 따라 처리한다."
+
+  function client(searchAdminRule: () => Promise<string>): LawApiClient {
+    return {
+      searchLaw: async () => EMPTY_LAW_XML,
+      fetchApi: async () => EMPTY_PREC,
+      searchAdminRule,
+    } as unknown as LawApiClient
+  }
+
+  it("행정규칙 검색이 장애(HTML·빈 응답·429)로 실패하면 ✗ NOT_FOUND가 아니라 ⚠(판정 불가)로 보고한다", async () => {
+    const failing = client(async () => { throw new Error("법제처 API가 HTML 오류 페이지를 반환했습니다") })
+    const r = await verifyCitations(failing, { text: TEXT, maxCitations: 15 })
+    const text = r.content[0].text
+    expect(text).toContain("⚠")
+    expect(text).toContain("행정규칙 확인 실패")
+    expect(text).not.toContain("[NOT_FOUND]")
+  })
+
+  it("행정규칙 검색이 정상 0건이면 종전대로 ✗ NOT_FOUND로 보고한다", async () => {
+    const r = await verifyCitations(client(async () => EMPTY_ADMRUL_XML), { text: TEXT, maxCitations: 15 })
+    expect(r.content[0].text).toContain("[NOT_FOUND]")
+  })
+})

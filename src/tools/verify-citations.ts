@@ -296,7 +296,11 @@ async function verifyOne(
         try {
           const adminHit = await tryVerifyAdminRuleCitation(apiClient, candidates, inputLabel, apiKey)
           if (adminHit) return adminHit
-        } catch { /* 폴백 실패는 무시하고 기존 NOT_FOUND 경로 유지 */ }
+        } catch (e) {
+          // Codex 검토(2026-09-02) 차단 1: 폴백의 429·HTML·빈 응답은 "확인 실패"이지 "없음"이 아니다.
+          // 삼키고 ✗ NOT_FOUND로 확정하면 실존 행정규칙을 환각으로 오판하므로 ⚠(판정 불가)로 보고
+          return `⚠ ${inputLabel} — 법령 DB 미매칭, 행정규칙 확인 실패(판정 불가): ${e instanceof Error ? e.message : String(e)}`
+        }
         return `✗ ${inputLabel} — [NOT_FOUND] 법제처 DB에 해당 법령 없음 (법령명 오탈자 또는 존재하지 않는 법령)`
       }
       return `⚠ ${inputLabel} — 법제처 검색은 '${fallback.lawName}'(으)로만 매칭됨. 법령명 정확성 재확인 필요`
