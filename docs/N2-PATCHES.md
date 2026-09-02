@@ -181,6 +181,27 @@
   체인 데드라인·부분 결과, 별표 페이지네이션, 분리시행 처리(applicable_law·time_travel),
   시행 예정 개정 경고, 부존재 오단정 하드닝, 날짜 표기 `2024.01.05` 통일(사용자 가시 변경)
 
+### 검토 반영 (2026-09-02, Codex 교차검토 — 1차 "수정 후 배포" → 차단 1 수정 완료)
+- 검토 입력: `docs\codex-review-prompt-20260902-law-4122-sync.md`(번들) — range-diff·해소 후 전문·upstream
+  api-client diff·N2 전체 diff 첨부(98KB). 참고1: **충돌 해소 2곳 의미 보존 확인**
+- **차단 1 수정 (커밋 b19d6df)**: verify-citations.ts 법령 미매칭 후 admrul 폴백 호출부의 `catch {}`가
+  429·HTML·빈 응답 throw를 삼키고 ✗ NOT_FOUND(환각 의심)로 확정 → `⚠ … 행정규칙 확인 실패(판정 불가): <사유>`
+  반환. 8/19 차단 3(findAdminRule의 throw)이 verifyAdminRuleCitation 경로만 ⚠로 받고 이 폴백 경로는
+  누락됐던 것. 회귀 테스트 2건(장애 → ⚠·NOT_FOUND 부재 / 정상 0건 → ✗ 유지). vitest 785 통과
+- **권고 1 문서화 수용 (코드 무변경)**: nts-body.ts의 `response.text()` 직접 사용 — stdio 단일 사용자,
+  taxlaw 응답 수 KB, fetchWithRetry 30초 상한, 취소 신호 발생 경로 없음. 백로그: `readResponseText` 전환
+- **권고 2 문서화 수용 + 실측**: 사다리의 `[NOT_FOUND]` 문자열 판별 — v4.12.2 실호출에서 nts 미스 렌더링
+  동일 확인, 사다리 E2E(3어절 0건 → 2어절 6건, 축약 표기) 정상. 8/19 권고 1과 같은 한계(구조화된 오류 코드 부재)
+- **확인 불가 2건 실측 해소**: pdfjs-dist 4.10.38 — 동봉 Node v22.22.2로 ESM 로드 성공, kordoc 4.7.2 peer `^4.10.38`
+  일치, 별표4 표 파싱 성공 / 사다리 실동작 — 위 E2E
+- **2차 검토 판정 "배포 가능"** (`docs\codex-review-prompt-20260902-law-4122-sync-r2.md`, 수정 diff + 실측 로그 첨부):
+  차단 1 해소 확인, 권고 2건 문서화 수용 타당. 참고 1(오류 메시지를 응답에 그대로 포함 — 길이 제한 권장)은
+  백로그. 확인 불가 2건은 소스로 해소: ⚠ 집계는 줄머리 기호 카운트(verify-citations.ts `startsWith("⚠")`)라 일관,
+  남은 `catch {}` 4곳은 전부 무해(JO 코드 변환 실패 skip·범위 힌트·URL 파싱·게이트 키워드 후보 — 검증 결과 삼킴 아님)
+- **공유폴더 배포 (2026-09-02 12:22)**: law 4.10.0+N2 → **4.12.2+N2** (n2 = b19d6df). build 276 + node_modules 5,443
+  (pdfjs-dist 4.10.38) + 메타·문서. 롤백: `archive\pre-law4122-20260902-122223\` (build·node_modules·메타 전부 —
+  역순 스왑으로 완결). 증적: 번들 `docs\deploy-evidence-20260902-law-4122.md`
+
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)
 - **무엇을**: 
