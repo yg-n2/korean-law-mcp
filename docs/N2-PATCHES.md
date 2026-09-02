@@ -160,6 +160,27 @@
   "퇴직금 중간정산 되나요?" → 판례 전문 첨부(수정 전이면 전량 차단),
   "식대 비과세 되나요?" → 무관 판례(1세대1주택)만 정당 생략 + 직접조회 안내
 
+### upstream 동기화 (2026-09-02, v4.10.0 → v4.12.2 — 법제처 API 변경 장애 복구)
+- **계기**: 법제처가 2026-08-27부터 `lawService.do?target=eflaw` 단건 조회에 `efYd`를
+  요구하도록 바뀌어, MST 단독 `get_law_text`가 HTML 안내 페이지를 받고 통째로 실패.
+  `verify_citations`는 이 경로만 타므로 실존 인용 전건이 ⚠로 나옴.
+  4.10.0 설치본 실호출로 재현: 소득세법 §12·법인세법 §19 → ⚠ 2/2, mst 단독 → EXTERNAL_API_ERROR
+- **동기화**: `main` ff-merge `71e9f3d` → `1c55f94`(v4.12.2, 커밋 약 90건, 152파일).
+  `n2` rebase 10커밋 재적용. 충돌 2곳(둘 다 `src/tools/verify-citations.ts`):
+  ① import 양쪽 추가 → 둘 다 유지 ② upstream이 `extractLawName`을
+  `lawNameFromCitationContext`(export)로 개명 → upstream 이름 + 패치 #4의
+  `!isAdminRuleName` 선행사 가드 유지. 나머지 8커밋은 자동 적용
+- **의존성**: `pdfjs-dist` `^5.5.207` → `4.10.38` 고정(upstream 변경). 배포 시 node_modules 갱신 필요
+- **검증**: tsc 빌드 통과, vitest 783/783(upstream 722 + N2 61), 신빌드 실호출 —
+  verify_citations ✓ 2/2 복구, get_law_text mst+jo="제12조" 5,210자·목 45개,
+  nts 목록 문서번호 표기(패치 #3) 회귀 정상
+- **주의(upstream 설계)**: MST 단독 폴백(`target=law`)은 분리시행 공포본의 특정 슬라이스를
+  돌려준다 — 소득세법 MST 280405는 시행일 20260101판(현행은 20260701). `efYd` 동반이나
+  `lawId` 조회는 20260701판. 현행 정밀 인용이 필요하면 `lawId` 또는 `efYd` 동반 권장
+- **동반 수신 (upstream 4.11.0·4.12.x)**: 판례 인용 검증 축(verify_citations 법령+판례 2축),
+  체인 데드라인·부분 결과, 별표 페이지네이션, 분리시행 처리(applicable_law·time_travel),
+  시행 예정 개정 경고, 부존재 오단정 하드닝, 날짜 표기 `2024.01.05` 통일(사용자 가시 변경)
+
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)
 - **무엇을**: 
