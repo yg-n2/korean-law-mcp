@@ -1,6 +1,16 @@
 /** Bounded, cancellable readers for upstream Fetch responses. */
 
-import { getRequestSignal, requestCancelledError, requestContext, throwIfRequestCancelled } from "./session-state.js"
+import { combineAbortSignals, getRequestSignal, requestCancelledError, requestContext, throwIfRequestCancelled } from "./session-state.js"
+
+// [N2 패치] fetch의 타이머는 헤더 수신 뒤 해제되므로 본문 소비에도 별도 전체 제한을 둔다.
+function bodyReadDeadline(): { signal: AbortSignal, dispose: () => void } {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new Error("본문 읽기 30000ms 제한 초과")), 30_000)
+  return {
+    signal: combineAbortSignals(controller.signal, getRequestSignal())!,
+    dispose: () => clearTimeout(timer),
+  }
+}
 
 function contentLength(response: Response): number | undefined {
   const raw = response.headers.get("content-length")
@@ -99,11 +109,12 @@ export async function readResponseBytes(response: Response): Promise<Uint8Array>
   if (!response.body) return new Uint8Array()
 
   const reader = response.body.getReader()
+  const deadline = bodyReadDeadline()
   const chunks: Uint8Array[] = []
   let length = 0
   try {
     while (true) {
-      const { done, value } = await readChunk(reader, getRequestSignal())
+      const { done, value } = await readChunk(reader, deadline.signal)
       if (done) break
       if (!value) continue
 
@@ -123,6 +134,7 @@ export async function readResponseBytes(response: Response): Promise<Uint8Array>
     abandonReader(reader)
     throw error
   } finally {
+    deadline.dispose()
     reader.releaseLock()
   }
 
@@ -154,18 +166,23 @@ export async function readBodyPrefix(
   if (!response.body) return { text: "", complete: true }
 
   const reader = response.body.getReader()
+  const deadline = bodyReadDeadline()
   const chunks: Uint8Array[] = []
   let length = 0
   let complete = false
   try {
     while (length < maxBytes) {
-      const { done, value } = await readChunk(reader, getRequestSignal())
+      const { done, value } = await readChunk(reader, deadline.signal)
       if (done) { complete = true; break }
       if (!value) continue
       chunks.push(value)
       length += value.byteLength
     }
+  } catch (error) {
+    abandonReader(reader)
+    throw error
   } finally {
+    deadline.dispose()
     reader.releaseLock()
   }
 

@@ -114,7 +114,8 @@ export function hasIdentifiableAnnexNumber(annex: AnnexItem): boolean {
   const decoded = /^\d{6}$/.test(code) ? fromAnnexCode(code) : undefined
   if (decoded && decoded.main > 0) return true
   const title = String(annex.별표명 || "").replace(/<[^>]+>/g, "")
-  return new RegExp(`(?:${ANNEX_KEYWORDS.join("|")})\\s*제?\\s*\\d+`).test(title)
+  // 제목 안의 다른 별표 참조나 '별표 제39조 관련'은 항목 자체 번호가 아니다.
+  return new RegExp(`^\\s*\\[?\\s*(?:${ANNEX_KEYWORDS.join("|")})\\s*제?\\s*\\d+(?:\\s*의\\s*\\d+)?(?:\\s*호)?(?:\\s*서식)?(?=\\s|\\]|$)`).test(title)
 }
 
 export function buildSelectorCandidates(selector: string): Set<string> {

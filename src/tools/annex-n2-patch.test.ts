@@ -7,6 +7,14 @@ import { readExecutionLimits } from "../lib/execution-limits.js"
 import type { LawApiClient } from "../lib/api-client.js"
 
 describe("N1: 유일 별표 폴백은 번호 없는 별표에만", () => {
+  it("제목 안의 별표 참조나 조문 번호를 항목 자체 번호로 오인하지 않는다", () => {
+    for (const title of ["수수료(별표 2 관련)", "별표 제39조 관련 수수료"]) {
+      const item = { 별표번호: "", 별표명: title, 별표종류: "별표" }
+      expect(hasIdentifiableAnnexNumber(item)).toBe(false)
+      expect(findMatchingAnnex([item], "별표 1")).toBe(item)
+    }
+  })
+
   const ONLY_1: AnnexItem[] = [{ 별표번호: "000100", 별표명: "[별표 1] 과태료 부과기준", 별표종류: "별표" }]
 
   it("번호 있는 유일 별표 1을 '별표 2' 요청에 돌려주지 않는다", () => {
@@ -63,6 +71,13 @@ const stub = (fetchApi: () => Promise<string>, mst = "283481") => ({
 }) as unknown as LawApiClient
 
 describe("N2: 정본 대조를 못 끝내면 '없음' 대신 '확인 불가'", () => {
+  it.each(["not-json", "{}", JSON.stringify({ 법령: { 별표: { 별표단위: [{ 별표번호: "0002", 별표제목: "링크 없음" }] } } })])(
+    "정본 응답이 손상됐거나 링크가 없어도 부존재로 단정하지 않는다: %s", async (body) => {
+      const r = await getAnnexes(stub(async () => body), { lawName: "소득세법 시행령", bylSeq: "000200" } as never)
+      expect(r.content[0].text).toContain("[확인 불가]")
+      expect(r.content[0].text).not.toContain("[NOT_FOUND]")
+    },
+  )
   it("정본 조회가 실패하면 NOT_FOUND가 아니라 확인 불가", async () => {
     const r = await getAnnexes(stub(async () => { throw new Error("body budget exceeded") }), {
       lawName: "소득세법 시행령", bylSeq: "000200",

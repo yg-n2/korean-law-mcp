@@ -112,5 +112,14 @@ export async function fetchLawAnnexUnits(
     extraParams: { MST: mst },
     apiKey,
   })
-  return parseLawAnnexUnits(text)
+  // 파싱 실패·오류 봉투·파일 링크 누락을 '정본 대조 완료, 별표 없음'으로 바꾸지 않는다.
+  const body = JSON.parse(text)
+  if (!body?.법령 || typeof body.법령 !== "object" || Array.isArray(body.법령)) {
+    throw new Error("현행 본문 법령 구조 확인 불가")
+  }
+  const raw = body.법령.별표?.별표단위
+  const expected = raw == null ? 0 : Array.isArray(raw) ? raw.length : 1
+  const units = parseLawAnnexUnits(text)
+  if (units.length !== expected) throw new Error("현행 본문 별표 번호 또는 파일 링크 확인 불가")
+  return units
 }
