@@ -28,6 +28,18 @@ export const DEFAULT_EXECUTION_LIMITS: ExecutionLimits = {
   maxToolResponseChars: 50_000,
 }
 
+/**
+ * [N2 패치 2026-09-23] 실제 기동(readExecutionLimits)의 본문 한도 기본값: 2MiB/8MiB → 8MiB/32MiB.
+ * 소득세법 시행령 등 대형 시행령의 현행 본문(target=law)이 약 3MB라(2026-09-02 실측 3,080,999B)
+ * 2MiB에서 별표 정본 대조가 실패했다. 팀원 PC의 Desktop config는 갱신 때 수정하지 않으므로
+ * env가 아니라 기본값으로 올린다. env(MCP_MAX_*_BODY_BYTES)가 있으면 그 값이 우선.
+ * DEFAULT_EXECUTION_LIMITS(upstream 값)는 upstream 테스트가 기준으로 쓰므로 그대로 둔다.
+ */
+export const N2_BODY_LIMIT_DEFAULTS = {
+  maxUpstreamBodyBytes: 8 * 1024 * 1024,
+  maxTotalUpstreamBodyBytes: 32 * 1024 * 1024,
+} as const
+
 const MAX_CONFIGURED_REQUESTS = 1_000
 const MAX_CONFIGURED_BYTES = 100 * 1024 * 1024
 const MAX_CONFIGURED_RESPONSE_CHARS = 1_000_000
@@ -71,14 +83,14 @@ export function readExecutionLimits(env: NodeJS.ProcessEnv = process.env): Execu
     maxUpstreamBodyBytes: parseIntegerLimit(
       "MCP_MAX_UPSTREAM_BODY_BYTES",
       env.MCP_MAX_UPSTREAM_BODY_BYTES,
-      DEFAULT_EXECUTION_LIMITS.maxUpstreamBodyBytes,
+      N2_BODY_LIMIT_DEFAULTS.maxUpstreamBodyBytes,
       1_024,
       MAX_CONFIGURED_BYTES,
     ),
     maxTotalUpstreamBodyBytes: parseIntegerLimit(
       "MCP_MAX_TOTAL_UPSTREAM_BODY_BYTES",
       env.MCP_MAX_TOTAL_UPSTREAM_BODY_BYTES,
-      DEFAULT_EXECUTION_LIMITS.maxTotalUpstreamBodyBytes,
+      N2_BODY_LIMIT_DEFAULTS.maxTotalUpstreamBodyBytes,
       1_024,
       MAX_CONFIGURED_BYTES,
     ),

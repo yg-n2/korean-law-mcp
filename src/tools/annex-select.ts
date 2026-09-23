@@ -75,7 +75,14 @@ export function findMatchingAnnex(
     // 모델이 "별표1" 등 임의 번호로 불러도 매칭 0건 → NOT_FOUND로 새는 대신 유일 별표를 반환.
     // 단, 가지번호(1의2) 요청은 폴백 금지 — 유일 항목이 본번(별표 1)이어도 다른 별표라서,
     // 위 buildSelectorCandidates가 막은 "별표 1 무음 오선택"이 여기로 재개방되면 안 된다.
-    if (annexList.length === 1 && parseAnnexNumber(annexSelector)?.sub == null) {
+    // [N2 패치] 유일 항목에 번호가 있으면(별표번호 코드·제목 표기) 폴백 금지 — 번호가 확인되는
+    // 별표 1을 "별표 2"·"000102" 요청에 돌려주면 다른 별표를 인용하게 된다(2026-09-23 Astra 재현).
+    // 번호가 없는 단일 별표만 원래 취지대로 폴백한다. 막힌 경우 호출부가 사용 가능한 번호를 안내한다.
+    if (
+      annexList.length === 1 &&
+      parseAnnexNumber(annexSelector)?.sub == null &&
+      !hasIdentifiableAnnexNumber(annexList[0])
+    ) {
       return annexList[0]
     }
     return undefined
@@ -96,6 +103,18 @@ export function findMatchingAnnex(
   }
   // knd 미지정/전체(5): 표(별표)를 서식보다 우선
   return matches.find(isTable) || matches[0]
+}
+
+/**
+ * [N2 패치] 항목 자체가 번호를 갖는지 — 별표번호가 유효한 6자리 코드(본번 ≥ 1)이거나
+ * 제목에 `[별표 N]`·`별지 제N호` 같은 번호 표기가 있으면 번호 있는 별표다.
+ */
+export function hasIdentifiableAnnexNumber(annex: AnnexItem): boolean {
+  const code = String(annex.별표번호 || "").trim()
+  const decoded = /^\d{6}$/.test(code) ? fromAnnexCode(code) : undefined
+  if (decoded && decoded.main > 0) return true
+  const title = String(annex.별표명 || "").replace(/<[^>]+>/g, "")
+  return new RegExp(`(?:${ANNEX_KEYWORDS.join("|")})\\s*제?\\s*\\d+`).test(title)
 }
 
 export function buildSelectorCandidates(selector: string): Set<string> {

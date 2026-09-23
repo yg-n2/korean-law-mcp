@@ -202,6 +202,25 @@
   (pdfjs-dist 4.10.38) + 메타·문서. 롤백: `archive\pre-law4122-20260902-122223\` (build·node_modules·메타 전부 —
   역순 스왑으로 완결). 증적: 번들 `docs\deploy-evidence-20260902-law-4122.md`
 
+### 6. 별표 오선택·부존재 단정 방지 + 본문 한도 기본값 상향 (2026-09-23)
+- **무엇을**:
+  - N1 `findMatchingAnnex` 유일 항목 폴백을 **번호 없는 별표에만** 허용. 번호가 확인되는(별표번호 6자리 코드 본번≥1,
+    또는 제목의 `[별표 N]`·`별지 제N호`) 유일 별표 1을 "별표 2"·"000102" 요청에 돌려주던 오선택 차단 → 사용 가능 번호 안내
+  - N2 `extractAnnexContent`에서 법령(lawType=law)이 색인 미스이고 **현행 본문 대조를 끝내지 못했으면**
+    (`현행 본문 조회 실패` 또는 `법령일련번호 미확정`) `[NOT_FOUND]`("해당 데이터 없음" 명시 지시) 대신 `[확인 불가]` 반환.
+    대조까지 끝났는데 없으면 종전대로 NOT_FOUND
+  - L2 `readExecutionLimits()` 본문 한도 기본값 2MiB/8MiB → **8MiB/32MiB** (`N2_BODY_LIMIT_DEFAULTS`).
+    `DEFAULT_EXECUTION_LIMITS`(upstream 값)는 upstream 테스트 기준이라 그대로 둠. env가 있으면 env 우선
+- **왜**: 번들 종합 검토 적대적 검토(Astra, 2026-09-23 R7·R9 재현). 소득세법 시행령 현행 본문이 약 3MB(9/2 실측 3,080,999B)라
+  2MiB에서 정본 대조가 실패 → get_annexes "신설 별표 병합 확인 불가"가 팀원 전원에게 지속. 팀원 Desktop config는
+  갱신 때 수정하지 않으므로 env 대신 기본값으로 상향
+- **건드린 파일**: `src/tools/annex-select.ts`(폴백 조건 + `hasIdentifiableAnnexNumber` 신설), `src/tools/annex.ts`
+  (`canonicalChecked` + 확인 불가 분기), `src/lib/execution-limits.ts`(`N2_BODY_LIMIT_DEFAULTS` + readExecutionLimits 2줄),
+  `src/tools/annex-n2-patch.test.ts`(신규 12건 — upstream 테스트와 분리)
+- **upstream PR 가능 여부**: N1·N2 가능(상류 결함). L2는 상류 운영(원격 호스트) 한도 정책과 얽혀 N2 한정
+- **검증 방법**: vitest 전체 797 통과(기존 785 + 신규 12). 알려진 한계: fetch-with-retry는 헤더 수신 후 타이머를 해제해
+  본문이 느리게 흐르면 한도와 무관하게 오래 걸릴 수 있다(상류 구조, 이번 미변경 — Astra 지적 기록)
+
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)
 - **무엇을**: 

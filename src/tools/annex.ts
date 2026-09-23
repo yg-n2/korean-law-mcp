@@ -245,11 +245,15 @@ async function extractAnnexContent(
   // 법령은 현행 본문(lawService)의 별표단위 링크를 정본으로 우선 사용 (#77 — licbyl
   // 인덱스가 구본/결함 파일을 가리키거나 신설 별표를 누락하는 사례). 실패 시 licbyl 폴백.
   let canonicalIssue = false
+  // [N2 패치] 현행 본문(정본) 대조가 실제로 끝났는지. 끝나지 않았으면 색인에 없다는 이유로
+  // "해당 별표 없음"을 단정하지 않는다 — 색인은 신설 별표를 누락하는 사례가 있다(#77).
+  let canonicalChecked = false
   if (lawType === "law") {
     const mst = matched?.관련법령일련번호 || annexList[0]?.관련법령일련번호
     if (mst) {
       try {
         const units = await loadUnits(String(mst))
+        canonicalChecked = true
         const unit = pickAnnexUnit(units, {
           code6: matched?.별표번호 ? String(matched.별표번호).trim() : undefined,
           kind: matched?.별표종류 ? String(matched.별표종류) : undefined,
@@ -276,6 +280,22 @@ async function extractAnnexContent(
 
   if (!matched) {
     const availableBylSeq = annexList.map((a) => a.별표번호).filter(Boolean).slice(0, 20).join(", ")
+    if (lawType === "law" && !canonicalChecked) {
+      const why = canonicalIssue ? "현행 본문 조회 실패" : "대상 법령일련번호 미확정"
+      return {
+        content: [{
+          type: "text",
+          text: [
+            `[확인 불가] 별표 선택값 "${annexSelector}"을(를) 별표 색인에서 찾지 못했고, 현행 본문 대조도 끝내지 못했습니다(${why}). (법령: ${normalizedLawName})`,
+            "",
+            "⚠️ 색인은 신설 별표를 누락할 수 있으므로 '해당 별표가 없다'고 단정하지 마세요. 사용자에게는 '확인 불가(조회 장애)'로 알리고, 잠시 후 다시 조회하거나 법제처에서 직접 확인하도록 안내하세요.",
+            "",
+            `색인상 별표번호(일부): ${availableBylSeq || "없음"}`,
+          ].join("\n"),
+        }],
+        isError: true,
+      }
+    }
     return notFoundResponse(
       `별표 선택값 "${annexSelector}"에 해당하는 항목을 찾을 수 없습니다. (법령: ${normalizedLawName})`,
       [
