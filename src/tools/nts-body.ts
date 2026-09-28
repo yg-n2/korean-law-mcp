@@ -14,6 +14,7 @@ import type { LawApiClient } from "../lib/api-client.js"
 import { cleanHtml } from "../lib/article-parser.js"
 import { truncateResponse } from "../lib/schemas.js"
 import { fetchWithRetry } from "../lib/fetch-with-retry.js"
+import { readResponseText } from "../lib/response-body.js"
 import {
   getExternalHttpsProxyConfig,
   requestExternalHttps,
@@ -128,7 +129,8 @@ async function fetchTaxlawAction(ntstDcmId: string, referer: string): Promise<an
     headers,
     body: body.toString(),
   })
-  const text = await response.text()
+  // [N2 패치] 공통 본문 한도·30초 읽기 제한·취소를 적용한다(response.text()는 무제한으로 읽었다).
+  const text = await readResponseText(response)
   if (!response.ok) {
     throw new Error(`taxlaw action.do failed with HTTP ${response.status}`)
   }

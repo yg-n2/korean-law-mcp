@@ -221,7 +221,7 @@
 - **검증 방법**: vitest 전체 797 통과(기존 785 + 신규 12). 알려진 한계: fetch-with-retry는 헤더 수신 후 타이머를 해제해
   본문이 느리게 흐르면 한도와 무관하게 오래 걸릴 수 있다(상류 구조, 이번 미변경 — Astra 지적 기록)
 
-### 7. 최종 검토 로컬 보완 (2026-09-23, 미게시·미빌드)
+### 7. 최종 검토 보완 (2026-09-23, 커밋 ad79de9 — 같은 날 12:31 공유폴더 3차 재게시로 빌드·게시 완료)
 - 별표 번호 판정은 제목 앞의 번호 표기만 인정하고 제목 안 참조·조문 번호를 제외한다.
 - 정본 조회의 잘못된 JSON·법령 구조 누락·번호/파일 링크 누락을 조회 실패로 처리하여 `[NOT_FOUND]` 단정 방지.
 - `response-body.ts`의 전체 본문 및 미리보기 읽기에 각각 30초 전체 제한을 추가한다. 헤더 뒤 정지한 스트림도 취소하고 타이머 정리.
@@ -230,6 +230,24 @@
 - 로컬 검증: vitest 803개 통과, `tsc --noEmit` 통과. 외부 실호출 없음.
 - 공유본 `9aa8c39`의 패치 6과 구분한다. 이 턴은 src·docs 수정만 허용되어 build를 덮어쓰지 않았다.
   재게시 담당자가 빌드·소스/빌드 일치·기동을 확인해야 한다. 번들 최종 보고서 참조.
+
+### upstream 동기화 (2026-09-28, v4.12.2 → v4.14.2) + 패치 8
+- **동기화**: `n2`를 upstream/main(efbf82c)에 rebase(작업 브랜치 `n2-sync-4142`, 원본 보존 `n2-backup-20260928`).
+  충돌 4곳 해결:
+  - 패치 2 `chains.ts`·`precedent-evidence.ts`: 상류의 판례 상세 메모(`detailMemo`)와 `relevanceGate`를 둘 다 유지.
+    메모가 다른 검색의 항목을 재사용할 수 있어 관련성 판정은 **이번 호출의 hit**(`hits[i]`)로 한다(Astra M7 지적 대응)
+  - 패치 4 `verify-citations.ts`: 상류가 법령 해소를 `memo.resolveLaw`(no_candidates/error/repealed/not_found/loose_only)로
+    분리 → 행정규칙 접미사 분기는 해소 **전**(불필요한 법령 검색 방지), admrul 폴백은 `not_found` 분기, 폴백 장애는
+    ⚠(판정 불가) 유지(2026-09-02 Codex 차단 1)
+  - 패치 6 `annex.ts`: 상류 `loadUnits`(정본 조회 메모) 사용 + `canonicalChecked = true` 유지
+- **패치 8 (신규)**:
+  - `law-text.ts` NOT_FOUND 재조회 안내가 입력 식별자 종류를 유지(lawId 입력이면 lawId, MST면 "현행 보장 아님" 명시).
+    상류 4.14.2는 lawId만 준 호출에도 `get_law_text(mst="<lawId>")`로 안내했다. 시험 `law-text.n2-retry-hint.test.ts`
+  - `nts-body.ts` 본문을 `readResponseText`로 읽어 공통 바이트 한도·30초 읽기 제한·취소 적용(종전 `response.text()` 무제한).
+    `nts-body.test.ts` 모의 응답을 실제 `Response`로 교체
+- **상류가 대체하지 않는 것(유지 확인)**: 패치 1~6 전부. 상류 본문 기본 한도는 여전히 2/8MiB, 상류 45초는 fetch 재시도
+  예산이라 N2 30초 본문 읽기 제한을 대체하지 않는다
+- **검증**: vitest 1,072 통과(116파일), `tsc --noEmit` 통과, `npm run build` 성공. lockfile은 upstream 그대로(설치 후 드리프트 복원)
 
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)

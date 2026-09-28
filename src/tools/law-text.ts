@@ -76,9 +76,14 @@ export async function getLawText(
       // efYd 가 붙어 있으면 그게 1순위 용의자다. 종전 메시지는 무조건 mst/lawId 를 탓해,
       // 식별자가 멀쩡한데도 "search_law 로 유효한 mst 를 확인하라"고 엉뚱한 곳을 가리켰다
       // (#160: search_law 가 준 mst/lawId 그대로인데 efYd 에 오늘 날짜를 넣어 NOT_FOUND).
-      const retryId = input.mst || input.lawId || ""
+      // [N2 패치] 재조회 안내는 입력한 식별자 종류를 유지한다. 종전(상류 4.14.2)은 lawId 만 준 호출에도
+      // get_law_text(mst="<lawId>") 로 안내해 다른 종류의 값을 MST 로 보내게 했다. 또 MST 단독 조회는
+      // 분리시행 공포본이면 마지막 시행 슬라이스를 돌려줄 수 있어(api-client.getLawText 주석) 현행 보장이 아니다.
+      const currentRetry = input.lawId
+        ? `get_law_text(lawId="${input.lawId}") 로 efYd 없이 재조회`
+        : `get_law_text(mst="${input.mst}") 로 efYd 없이 재조회 — MST 단독은 분리시행 법령이면 현행이 아닌 시행판일 수 있으니 결과의 시행일 라벨을 확인하고, 현행이 필요하면 search_law 로 lawId 를 확인해 lawId 로 조회`
       const hint = input.efYd
-        ? `⚠️ efYd=${input.efYd} 에 해당하는 시행일 버전이 없습니다. efYd 는 '조회 기준일'이 아니라 그 법령에 실재하는 시행일이어야 합니다 — 오늘 날짜를 넣으면 대개 실패합니다.\n→ 현행 본문: get_law_text(mst="${retryId}") 로 efYd 없이 재조회\n→ 시행예정본: search_law 가 안내한 efYd 를 그대로 사용\nmst/lawId 자체는 유효할 수 있습니다.`
+        ? `⚠️ efYd=${input.efYd} 에 해당하는 시행일 버전이 없습니다. efYd 는 '조회 기준일'이 아니라 그 법령에 실재하는 시행일이어야 합니다 — 오늘 날짜를 넣으면 대개 실패합니다.\n→ 현행 본문: ${currentRetry}\n→ 시행예정본: search_law 가 안내한 efYd 를 그대로 사용\nmst/lawId 자체는 유효할 수 있습니다.`
         : `⚠️ 법제처 API가 해당 mst/lawId에 대해 데이터를 반환하지 않았습니다. search_law로 유효한 mst를 먼저 확인하세요.`
       return {
         content: [{

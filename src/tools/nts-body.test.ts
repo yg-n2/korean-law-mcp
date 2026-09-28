@@ -49,11 +49,11 @@ describe("parseNtstDcmId", () => {
 
 // ---- 장애·응답구조 경로 (fetch 모킹, Codex 권고) ----
 
-function mockResponse(payload: unknown, ok = true, status = 200) {
-  fetchMock.mockResolvedValueOnce({
-    ok, status,
-    text: async () => (typeof payload === "string" ? payload : JSON.stringify(payload)),
-  })
+function mockResponse(payload: unknown, _ok = true, status = 200) {  // ok는 status로 결정된다
+  // [N2] 본문은 readResponseText(스트림·한도·30초 제한)로 읽으므로 실제 Response를 넘긴다.
+  fetchMock.mockResolvedValueOnce(
+    new Response(typeof payload === "string" ? payload : JSON.stringify(payload), { status })
+  )
 }
 
 const GOOD_ID = "010000000000515153"
