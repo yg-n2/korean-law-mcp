@@ -126,6 +126,16 @@ describe("buildPartialBody — 뷰 동작", () => {
     expect(v.text).toContain("keyword 또는 page")
   })
 
+  it("조문 체계 없는 본문에 keyword 요청 → 줄 단위로 찾는다, 같은 안내 반복 금지 (N2 패치 9)", () => {
+    const hit = buildPartialBody(ITEMIZED_BODY, ITEMIZED_BODY, { keyword: "성실히" })
+    expect(hit.text).toContain("가. 성실히 수행한다.")
+    expect(hit.text).toContain("1. 일반 원칙")
+    expect(hit.text).not.toContain("keyword 또는 page")
+    const miss = buildPartialBody(ITEMIZED_BODY, ITEMIZED_BODY, { keyword: "없는말" })
+    expect(miss.text).toContain("[NOT_FOUND]")
+    expect(miss.text).not.toContain("keyword 또는 page")
+  })
+
   it("복수 파라미터는 jo만 적용하고 무시 목록을 명시한다", () => {
     const { mode, ignored } = pickPartialMode({ jo: "제9-5조", keyword: "예금", page: 2 })
     expect(mode).toBe("jo")

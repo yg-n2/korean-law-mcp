@@ -7,6 +7,7 @@ import { DOMParser } from "@xmldom/xmldom"
 import type { LawApiClient } from "../lib/api-client.js"
 import { truncateResponse, MAX_RESPONSE_SIZE, formatDateDot } from "../lib/schemas.js"
 import { formatToolError, noResultHint } from "../lib/errors.js"
+import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import { detectAbolishedAdminRule } from "../lib/abolished-laws.js"
 import { analyzeImageOnlyBody, buildImageOnlyWarning } from "../lib/image-only-body.js"
 import {
@@ -354,13 +355,15 @@ function markChangedParts(text: string): string {
 
 /**
  * 신구대조 미제공 시 admrul 상세의 제·개정이유 폴백 (T2).
- * 발령번호·발령일자와 함께 반환하며, 이유 필드가 없으면 null.
+ * 발령번호·발령일자와 함께 반환하며, 이유 필드가 없으면 { text: null }.
+ * N2 패치 9: 조회 장애(429·시간 초과 등)는 { failed }로 구분한다 — 종전 catch→null은 장애를
+ * "제·개정이유도 API 미제공"으로 단정했다 (2026-09-28 Astra B3). 예산 소진·요청 취소는 다시 던진다.
  */
 async function fetchRevisionFallback(
   apiClient: LawApiClient,
   id: string,
   apiKey?: string
-): Promise<string | null> {
+): Promise<{ text: string | null } | { failed: string }> {
   try {
     const cacheKey = adminRuleCacheKey(id)
     let xmlText = adminRuleXmlCache.get<string>(cacheKey)
@@ -369,7 +372,7 @@ async function fetchRevisionFallback(
     }
     const doc = new DOMParser().parseFromString(xmlText, "text/xml")
     const reason = collectText(doc, "제개정이유내용").trim()
-    if (!reason) return null
+    if (!reason) return { text: null }
     const name = doc.getElementsByTagName("행정규칙명")[0]?.textContent?.trim() || ""
     const date = doc.getElementsByTagName("발령일자")[0]?.textContent?.trim() || ""
     const no = doc.getElementsByTagName("발령번호")[0]?.textContent?.trim() || ""
@@ -377,9 +380,10 @@ async function fetchRevisionFallback(
     let head = ""
     if (name) head += `행정규칙명: ${name}\n`
     if (no || date) head += `발령: 제${no || "?"}호${date ? ` (${formatDateDot(date)})` : ""}${kind ? ` · ${kind}` : ""}\n`
-    return `${head}\n${reason}`
-  } catch {
-    return null
+    return { text: `${head}\n${reason}` }
+  } catch (error) {
+    rethrowIfFatal(error)
+    return { failed: (error instanceof Error ? error.message : String(error)).slice(0, 200) }
   }
 }
 
@@ -423,9 +427,16 @@ export async function compareAdminRuleOldNew(
         // 반환한다 — "제○조를 ○○로 한다" 수준은 아니어도 변경 취지·대상 조문이
         // 문장으로 들어 있어 실용적 대체재가 된다. (id가 행정규칙일련번호인 경우 동작)
         const fallback = await fetchRevisionFallback(apiClient, String(input.id), input.apiKey)
-        if (fallback) {
+        if ("failed" in fallback) {
+          resultText += "[ERROR] 신구법 대조 데이터가 없고, 대체 자료인 제·개정이유 확인에 실패했습니다" +
+            ` (원인: ${fallback.failed}).\n` +
+            "제·개정이유가 없다는 뜻이 아닙니다 — 잠시 후 다시 조회하거나 law.go.kr 행정규칙 화면의 '제정·개정이유' 탭에서 확인하세요.\n" +
+            "⚠️ LLM은 대조 내용을 추측하지 마세요."
+          return { content: [{ type: "text", text: resultText }], isError: true }
+        }
+        if (fallback.text) {
           // 대조 헤더("알 수 없음" 등)는 버리고 폴백 자체 헤더로 대체한다
-          const text = "[신구법 대조 데이터 없음 — 제·개정이유로 대체합니다]\n\n" + fallback
+          const text = "[신구법 대조 데이터 없음 — 제·개정이유로 대체합니다]\n\n" + fallback.text
           return { content: [{ type: "text", text: truncateResponse(text) }] }
         }
         resultText += "[NOT_FOUND] 신구법 대조 데이터가 없습니다 (제·개정이유도 API 미제공).\n" +

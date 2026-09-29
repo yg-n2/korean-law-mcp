@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import { searchAdminRule, getAdminRule, compareAdminRuleOldNew } from "./admin-rule.js"
 import { extractDetailIds } from "./search-detail-chain.js"
 import type { LawApiClient } from "../lib/api-client.js"
+import { ExecutionLimitError } from "../lib/execution-limits.js"
 
 // 실측 응답 축약 (#72).
 // lawService.do?target=admrul&ID= 가 받는 값은 '행정규칙일련번호'(13자리)다.
@@ -259,5 +260,34 @@ describe("compare_admin_rule_old_new — 제·개정이유 폴백 (T2)", () => {
     expect(r.isError).toBe(true)
     expect(r.content[0].text).toContain("제·개정이유도 API 미제공")
     expect(r.content[0].text).toContain("law.go.kr")
+  })
+
+  it("제·개정이유 조회가 장애(429·시간 초과)면 '미제공'으로 단정하지 않고 확인 실패로 알린다 (N2 패치 9)", async () => {
+    for (const err of [
+      new Error("HTTP 429 Too Many Requests"),
+      Object.assign(new Error("request timed out"), { name: "AbortError" }),
+    ]) {
+      const stub = {
+        fetchApi: async () => OLDNEW_EMPTY_XML,
+        getAdminRule: async () => { throw err },
+      } as unknown as LawApiClient
+      const r = await compareAdminRuleOldNew(stub, { id: "2100000000003" })
+      expect(r.isError).toBe(true)
+      expect(r.content[0].text).not.toContain("미제공")
+      expect(r.content[0].text).toContain("확인에 실패")
+      expect(r.content[0].text).toContain(err.message)
+    }
+  })
+
+  it("호출 예산 소진은 폴백 안내로 바꾸지 않고 도구 오류로 전달한다 (N2 패치 9)", async () => {
+    const stub = {
+      fetchApi: async () => OLDNEW_EMPTY_XML,
+      getAdminRule: async () => { throw new ExecutionLimitError("Request upstream work budget exceeded (max 1 attempts).") },
+    } as unknown as LawApiClient
+    const r = await compareAdminRuleOldNew(stub, { id: "2100000000004" })
+    expect(r.isError).toBe(true)
+    expect(r.content[0].text).not.toContain("미제공")
+    expect(r.content[0].text).not.toContain("제·개정이유로 대체")
+    expect(r.content[0].text).not.toContain("확인에 실패")
   })
 })

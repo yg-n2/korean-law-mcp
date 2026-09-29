@@ -249,6 +249,18 @@
   예산이라 N2 30초 본문 읽기 제한을 대체하지 않는다
 - **검증**: vitest 1,072 통과(116파일), `tsc --noEmit` 통과, `npm run build` 성공. lockfile은 upstream 그대로(설치 후 드리프트 복원)
 
+### 9. 동기화 최종 검토(Astra) 보완 (2026-09-29)
+- **무엇을**:
+  - B3 `admin-rule.ts`: 신구대조 0건 시 제·개정이유 폴백(상류 신규)의 조회 장애(429·시간 초과 등)를 "API 미제공"과 구분 —
+    `[ERROR] … 확인에 실패했습니다`(isError)로 반환. 예산 소진·취소는 `rethrowIfFatal`로 다시 던짐
+  - R5 `admin-rule-views.ts`: 조문 체계 없는 행정규칙에 keyword를 주면 줄 단위 검색(앞뒤 1줄, 상위 max_results곳).
+    종전에는 keyword 요청에도 "keyword 또는 page를 사용하세요"를 돌려줬다
+  - R7 `law-text.ts`: efYd 입력 설명·특정 시행일 경고도 "현행은 efYd 없이 **lawId**로 재조회(MST 단독은 현행 보장 아님)"로 통일(패치 8 연장)
+- **왜**: `docs/reviews/execution-review-20260928-astra.md`(번들 저장소) 차단 B3, 권고 R5·R7
+- **건드린 파일**: `src/tools/admin-rule.ts`, `src/lib/admin-rule-views.ts`, `src/tools/law-text.ts` + 시험 `admin-rule.test.ts`·`admin-rule-articles.test.ts`
+- **upstream PR 가능 여부**: 가능(B3·R5는 상류 4.14 신규 경로의 결함)
+- **검증 방법**: vitest 1,075 통과(116파일, +3), `tsc` 빌드 성공
+
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)
 - **무엇을**: 

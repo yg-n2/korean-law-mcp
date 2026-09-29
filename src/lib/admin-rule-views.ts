@@ -84,10 +84,28 @@ function chapterView(parsed: ParsedAdminRule, chapter: string): string {
   return text
 }
 
+/**
+ * 조문 체계가 없는 본문(항목식 지침)은 줄 단위로 찾는다 — 종전에는 keyword 요청에도
+ * "keyword 또는 page를 사용하세요"를 돌려줘 해결되지 않는 재시도를 유도했다 (N2 패치 9, Astra R5).
+ */
+function lineKeywordView(lines: string[], kw: string, maxResults: number): string {
+  const idx = lines.flatMap((l, i) => (l.includes(kw) ? [i] : []))
+  if (idx.length === 0) {
+    return `[NOT_FOUND] 본문에 '${kw}'을(를) 포함한 줄이 없습니다. (조문 체계 없는 문서, ${lines.length}줄 검색)\n⚠️ LLM은 내용을 추측/생성하지 마세요.`
+  }
+  const cap = Math.max(1, Math.min(maxResults || 10, 30))
+  let text = `'${kw}' 포함 ${idx.length}곳 (조문 체계 없는 문서 — 줄 단위 검색, 앞뒤 1줄 포함)\n`
+  text += idx.length > cap ? `(상위 ${cap}곳만 표시 — 나머지는 page 파라미터로 전문 조회, max_results로 조정 가능)\n\n` : "\n"
+  text += idx.slice(0, cap)
+    .map((i) => lines.slice(Math.max(0, i - 1), i + 2).join("\n"))
+    .join("\n\n---\n\n")
+  return text
+}
+
 function keywordView(parsed: ParsedAdminRule, keyword: string, maxResults: number): string {
-  if (parsed.articles.length === 0) return NO_ARTICLE_MSG
   const kw = keyword.trim()
   if (!kw) return "[NOT_FOUND] keyword 가 비어 있습니다 — 검색어를 지정하세요."
+  if (parsed.articles.length === 0) return lineKeywordView(parsed.preamble, kw, maxResults)
   const hits = parsed.articles.filter((a) => a.lines.some((l) => l.includes(kw)))
   if (hits.length === 0) {
     return `[NOT_FOUND] 본문에 '${kw}'을(를) 포함한 조문이 없습니다. (총 ${parsed.articles.length}개조 검색)\n⚠️ LLM은 조문 내용을 추측/생성하지 마세요.`

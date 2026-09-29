@@ -16,7 +16,7 @@ export const GetLawTextSchema = z.object({
   mst: z.string().optional().describe("법령일련번호 (search_law에서 획득)"),
   lawId: z.string().optional().describe("법령ID (search_law에서 획득)"),
   jo: z.string().optional().describe("조문 번호. 자연어 표기 권장 — '제38조'·'제148조의2'를 그대로 넣으면 서버가 변환한다. 6자리 JO 코드 직접 지정 시 조번호 4자리 zero-pad + 의X 2자리: 제38조→003800, 제10조의2→001002, 제234조의2→023402(234002 아님)"),
-  efYd: z.string().optional().describe("시행일자 (YYYYMMDD). 그 법령에 **실재하는 시행일**이어야 한다 — 오늘 날짜 같은 임의 '조회 기준일'을 넣으면 NOT_FOUND 가 난다. 현행 본문은 efYd 없이 조회할 것. 시행예정본은 search_law 가 안내한 efYd 를 그대로 쓴다."),
+  efYd: z.string().optional().describe("시행일자 (YYYYMMDD). 그 법령에 **실재하는 시행일**이어야 한다 — 오늘 날짜 같은 임의 '조회 기준일'을 넣으면 NOT_FOUND 가 난다. 현행 본문은 efYd 없이 lawId 로 조회할 것(MST 단독은 분리시행 법령이면 현행이 아닌 시행판일 수 있음). 시행예정본은 search_law 가 안내한 efYd 를 그대로 쓴다."),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 }).refine(data => data.mst || data.lawId, {
   message: "mst 또는 lawId 중 하나는 필수입니다"
@@ -133,7 +133,7 @@ export async function getLawText(
     // 조회 시점 날짜와 시행일자를 비교해 명시
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, "")
     if (input.efYd) {
-      resultText += `⚠️ 특정 시행일자(efYd=${input.efYd}) 버전 조회 — 현행 법령이 아닐 수 있음. 현행 기준 답변에는 efYd 없이 재조회할 것.\n`
+      resultText += `⚠️ 특정 시행일자(efYd=${input.efYd}) 버전 조회 — 현행 법령이 아닐 수 있음. 현행 기준 답변에는 efYd 없이 lawId 로 재조회할 것(MST 단독은 현행 보장 아님 — lawId 는 search_law 결과에서 확인).\n`
     } else if (effDate && String(effDate) > today) {
       resultText += `⚠️ 시행 예정 버전 (조회기준일 ${today} 현재 미시행). 현재 효력 있는 조문과 다를 수 있음.\n`
     } else if (effDate) {
