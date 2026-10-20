@@ -29,6 +29,7 @@ import { fetchLineageVersions, sameLawName, todayKst, versionInForce } from "../
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import { getRequestSignal, throwIfRequestCancelled } from "../lib/session-state.js"
 import type { HistoricalVersion } from "../lib/historical-utils.js"
+import { isAdminRuleName, tryVerifyAdminRuleCitation, verifyAdminRuleCitation } from "./admin-rule-citation.js"
 
 export const VerifyCitationsSchema = z.object({
   text: z.string().min(1).describe("검증할 법률 텍스트 (LLM 답변/계약서/판결문 등). 조문 인용이 포함된 문자열"),
@@ -56,8 +57,10 @@ const ARTICLE_REGEX = /제\s*(\d+)\s*조(?:\s*의\s*(\d+))?(?:\s*제\s*(\d+)\s*�
 // 조문 인용 직전 30자에서 법령명 스캔 — "XX법/법률/시행령/시행규칙/규칙/규정/조례"로 끝나는 것.
 // 가운뎃점은 INTERPUNCT_CHARS 전체를 허용 — 일부만 넣으면 '표시‧광고에 관한 법률'이
 // '광고에 관한 법률'로 절단 추출돼 매칭에 실패한다(정규화는 추출 뒤라 못 살린다).
+// N2 패치 #4: 행정규칙 접미사(고시·훈령·예규·통칙·기준·지침) 추가 — 기존에는 이 인용이
+// 추출조차 안 되어 검증을 조용히 건너뛰었다. 검증 분기는 admin-rule-citation.ts 참조.
 const LAW_NAME_REGEX = new RegExp(
-  `([가-힣][가-힣${INTERPUNCT_CHARS}\\s]{0,30}?(?:법률|법|시행령|시행규칙|규칙|규정|조례))$`
+  `([가-힣][가-힣${INTERPUNCT_CHARS}\\s]{0,30}?(?:법률|법|시행령|시행규칙|규칙|규정|조례|고시|훈령|예규|통칙|기준|지침))$`
 )
 
 // 법령명 앞에 붙는 한국어 접속사·부사·수식어 제거 — "또한 상법" → "상법"
@@ -66,7 +69,10 @@ const LAW_NAME_STOPWORDS = /^(또한|그리고|하며|따라서|따라|위해|�
 // 그 자체로는 법령명이 될 수 없는 접미사 어절. 후보 축약이 앞 어절을 다 떼고 나면
 // 이런 토큰만 남는데("같은 법 시행규칙" → "시행규칙"), 검색에 넣으면 어떤 문서에서든
 // 무관한 법령을 물어온다(#70: "시행규칙" → '119긴급신고의 관리 및 운영에 관한 법률 시행규칙').
-const LAW_NAME_SUFFIX_TOKENS = new Set(["법", "법률", "시행령", "시행규칙", "규칙", "규정", "조례"])
+const LAW_NAME_SUFFIX_TOKENS = new Set([
+  "법", "법률", "시행령", "시행규칙", "규칙", "규정", "조례",
+  "고시", "훈령", "예규", "통칙", "기준", "지침", // N2 패치 #4
+])
 
 // 법령명 앞머리가 될 수 없는 어절 — 관형 표현("관한")·접속어("및")로 시작하는 후보.
 // 조사로 끝나는 첫 어절은 거르지 않는다: 「독립유공자예우에 관한 법률」·「공공기관의 운영에 관한 법률」·「국가를 당사자로 하는
@@ -190,7 +196,10 @@ export function parseCitations(text: string, maxCitations: number): ParsedCitati
       antecedentEnd = m.index
     } else {
       lawName = lawNameFromCitationContext(lookback)
-      if (lawName) {
+      // N2 패치 #4 보완(Opus 검토 차단 1): 행정규칙(고시·기준 등) 캡처는 '같은 법' 조응의
+      // 선행사가 될 수 없다 — 산문 어구("판단 기준")가 antecedent를 덮어쓰면 뒤따르는
+      // "같은 법 시행령"이 엉뚱한 이름으로 해소되어 정상 인용을 오판정한다.
+      if (lawName && !isAdminRuleName(lawName)) {
         antecedent = lawName
         antecedentEnd = m.index
       }
@@ -441,6 +450,11 @@ async function verifyOne(
     return `⚠ ${inputLabel} — 법령명 추출 실패 (앞 문맥에 법령명 명시 필요)`
   }
 
+  // N2 패치 #4: 고시·훈령 등 행정규칙 접미사면 법령 검색 대신 행정규칙(admrul)으로 검증
+  const candidates = lawNameCandidates(cite.lawName)
+  if (candidates.length > 0 && isAdminRuleName(cite.lawName)) {
+    return verifyAdminRuleCitation(apiClient, candidates, inputLabel, cite.lawName, apiKey)
+  }
   const resolution = await memo.resolveLaw(cite.lawName)
   if (resolution.kind === "no_candidates") {
     return `⚠ ${inputLabel} — 법령명 불명확 ('${cite.lawName}'은(는) 법령명으로 특정할 수 없음. 앞 문맥에 법령명 명시 필요)`
@@ -457,6 +471,15 @@ async function verifyOne(
     return verifyRenamed(apiClient, cite, resolution, apiKey)
   }
   if (resolution.kind === "not_found") {
+    // N2 패치 #4: '…규정'·'…규칙' 등은 행정규칙일 수 있다 — 법령 DB에 없으면 admrul 폴백
+    try {
+      const adminHit = await tryVerifyAdminRuleCitation(apiClient, candidates, inputLabel, apiKey)
+      if (adminHit) return adminHit
+    } catch (e) {
+      // Codex 검토(2026-09-02) 차단 1: 폴백의 429·HTML·빈 응답은 "확인 실패"이지 "없음"이 아니다.
+      // 삼키고 ✗ NOT_FOUND로 확정하면 실존 행정규칙을 환각으로 오판하므로 ⚠(판정 불가)로 보고
+      return `⚠ ${inputLabel} — 법령 DB 미매칭, 행정규칙 확인 실패(판정 불가): ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`
+    }
     return `✗ ${inputLabel} — [NOT_FOUND] 법제처 DB에 해당 법령 없음 (법령명 오탈자 또는 존재하지 않는 법령)`
   }
   if (resolution.kind === "loose_only") {

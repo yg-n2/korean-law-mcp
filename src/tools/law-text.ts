@@ -22,7 +22,7 @@ export const GetLawTextSchema = z.object({
   mst: z.string().optional().describe("법령일련번호 (search_law에서 획득)"),
   lawId: z.string().optional().describe("법령ID (search_law에서 획득)"),
   jo: z.string().optional().describe("조문 번호. 자연어 표기 권장 — '제38조'·'제148조의2'를 그대로 넣으면 서버가 변환한다. 6자리 JO 코드 직접 지정 시 조번호 4자리 zero-pad + 의X 2자리: 제38조→003800, 제10조의2→001002, 제234조의2→023402(234002 아님). '부칙' 이면 부칙 원문(최근 공포부터)"),
-  efYd: z.string().optional().describe("기준일 또는 시행일자 (YYYYMMDD). 시행일이면 그 버전, 시행일이 아닌 날짜(건축허가일·사건일 같은 조회 기준일)면 그날 시행 중이던 버전으로 자동 보정한다(제명이 바뀌기 전 버전 포함). 현행 본문은 efYd 없이 조회할 것. 시행예정본은 search_law 가 안내한 efYd 를 그대로 쓴다."),
+  efYd: z.string().optional().describe("기준일 또는 시행일자 (YYYYMMDD). 시행일이면 그 버전, 시행일이 아닌 날짜(건축허가일·사건일 같은 조회 기준일)면 그날 시행 중이던 버전으로 자동 보정한다(제명이 바뀌기 전 버전 포함). 현행 본문은 efYd 없이 lawId 로 조회할 것(MST 단독은 분리시행 법령이면 현행이 아닌 시행판일 수 있음). 시행예정본은 search_law 가 안내한 efYd 를 그대로 쓴다."),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 }).refine(data => data.mst || data.lawId, {
   message: "mst 또는 lawId 중 하나는 필수입니다"
@@ -124,9 +124,13 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput, re
       // efYd 가 붙어 있으면 그게 1순위 용의자다. 종전 메시지는 무조건 mst/lawId 를 탓해,
       // 식별자가 멀쩡한데도 "search_law 로 유효한 mst 를 확인하라"고 엉뚱한 곳을 가리켰다
       // (#160: search_law 가 준 mst/lawId 그대로인데 efYd 에 오늘 날짜를 넣어 NOT_FOUND).
-      const retryArg = input.mst ? `mst="${input.mst}"` : `lawId="${input.lawId || ""}"`
+      // [N2 패치 8] 재조회 안내는 lawId 를 우선한다. MST 단독 조회는 분리시행 공포본이면 마지막 시행 슬라이스를
+      // 돌려줄 수 있어(api-client.getLawText 주석) 현행 보장이 아니다
+      const currentRetry = input.lawId
+        ? `get_law_text(lawId="${input.lawId}") 로 efYd 없이 재조회`
+        : `get_law_text(mst="${input.mst || ""}") 로 efYd 없이 재조회 — MST 단독은 분리시행 법령이면 현행이 아닌 시행판일 수 있으니 결과의 시행일 라벨을 확인하고, 현행이 필요하면 search_law 로 lawId 를 확인해 lawId 로 조회`
       const hint = input.efYd
-        ? `⚠️ efYd=${input.efYd} 에 시행 중이던 버전을 찾지 못했습니다 (그 법령의 최초 시행일보다 앞선 날짜이거나 연혁 조회가 실패했을 수 있습니다).\n→ 현행 본문: get_law_text(${retryArg}) 로 efYd 없이 재조회\n→ 시행예정본: search_law 가 안내한 efYd 를 그대로 사용\n→ 그 시점 적용 법령 판단: legal_analysis(mode="applicable_law")\nmst/lawId 자체는 유효할 수 있습니다.`
+        ? `⚠️ efYd=${input.efYd} 에 시행 중이던 버전을 찾지 못했습니다 (그 법령의 최초 시행일보다 앞선 날짜이거나 연혁 조회가 실패했을 수 있습니다).\n→ 현행 본문: ${currentRetry}\n→ 시행예정본: search_law 가 안내한 efYd 를 그대로 사용\n→ 그 시점 적용 법령 판단: legal_analysis(mode="applicable_law")\nmst/lawId 자체는 유효할 수 있습니다.`
         : `⚠️ 법제처 API가 해당 mst/lawId에 대해 데이터를 반환하지 않았습니다. search_law로 유효한 mst를 먼저 확인하세요.`
       return {
         content: [{
@@ -180,7 +184,7 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput, re
     } else if (resolved === "scheduled") {
       resultText += `⚠️ 시행예정 버전 (시행 ${input.efYd}, 조회기준일 ${today} 현재 미시행). 그 사이 다른 개정이 더 공포될 수 있음.\n`
     } else if (input.efYd) {
-      resultText += `⚠️ 특정 시행일자(efYd=${input.efYd}) 버전 조회 — 현행 법령이 아닐 수 있음. 현행 기준 답변에는 efYd 없이 재조회할 것.\n`
+      resultText += `⚠️ 특정 시행일자(efYd=${input.efYd}) 버전 조회 — 현행 법령이 아닐 수 있음. 현행 기준 답변에는 efYd 없이 lawId 로 재조회할 것(MST 단독은 현행 보장 아님 — lawId 는 search_law 결과에서 확인).\n`
     } else if (effDate && String(effDate) > today) {
       resultText += `⚠️ 시행 예정 버전 (조회기준일 ${today} 현재 미시행). 현재 효력 있는 조문과 다를 수 있음.\n`
     } else if (effDate) {

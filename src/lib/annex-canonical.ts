@@ -124,7 +124,16 @@ export async function fetchLawAnnexUnits(
     extraParams: efYd ? { MST: mst, efYd } : { MST: mst },
     apiKey,
   })
+  // 파싱 실패·오류 봉투·파일 링크 누락을 '정본 대조 완료, 별표 없음'으로 바꾸지 않는다.
+  const body = JSON.parse(text)
+  if (!body?.법령 || typeof body.법령 !== "object" || Array.isArray(body.법령)) {
+    throw new Error("현행 본문 법령 구조 확인 불가")
+  }
+  const raw = body.법령.별표?.별표단위
+  const expected = raw == null ? 0 : Array.isArray(raw) ? raw.length : 1
   const units = parseLawAnnexUnits(text)
+  if (units.length !== expected) throw new Error("현행 본문 별표 번호 또는 파일 링크 확인 불가")
+  // 검증을 통과한 결과만 캐시한다(상류 별표단위 캐시 + N2 패치 7 구조 검증)
   if (units.length > 0) lawCache.set(cacheKey, units, ANNEX_UNITS_TTL_MS)
   return units
 }

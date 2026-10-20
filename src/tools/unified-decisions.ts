@@ -18,9 +18,10 @@ import { searchInterpretations, getInterpretationText } from "./interpretations.
 import { searchTaxTribunalDecisions, getTaxTribunalDecisionText } from "./tax-tribunal-decisions.js"
 import {
   searchCustomsInterpretations, getCustomsInterpretationText,
-  searchNtsInterpretations, getNtsInterpretationText,
+  searchNtsInterpretations,
   searchMoelInterpretations, getMoelInterpretationText,
 } from "./customs-interpretations.js"
+import { getNtsDecisionBody } from "./nts-body.js" // N2 자체 패치 #1: 예규 본문 조회
 import { searchConstitutionalDecisions, getConstitutionalDecisionText } from "./constitutional-decisions.js"
 import { searchAdminAppeals, getAdminAppealText } from "./admin-appeals.js"
 import {
@@ -40,6 +41,7 @@ import { searchTreaties, getTreatyText } from "./treaties.js"
 import { searchEnglishLaw, getEnglishLawText } from "./english-law.js"
 import { searchPrecedentsStructured } from "./precedent-search-core.js"
 import { fetchPrecedentEvidence, validatePrecedentSearchResult } from "./precedent-evidence.js"
+import { withCompactFallback } from "./decision-search-fallback.js"
 
 // ========================================
 // Domain enum & config
@@ -82,10 +84,11 @@ const DOMAIN_LABELS: Record<Domain, string> = {
 // Search handler dispatch table
 const SEARCH_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<LooseToolResponse>> = {
   precedent: searchPrecedents,
-  interpretation: searchInterpretations,
-  tax_tribunal: searchTaxTribunalDecisions,
-  customs: searchCustomsInterpretations,
-  nts: searchNtsInterpretations,
+  // N2 패치 #5: 예규·해석례·조세심판은 0건 시 축약 재검색 사다리 적용 (판례는 precedent-search-core가 자체 폴백 보유)
+  interpretation: withCompactFallback(searchInterpretations),
+  tax_tribunal: withCompactFallback(searchTaxTribunalDecisions),
+  customs: withCompactFallback(searchCustomsInterpretations), // nts와 같은 구현 — 동작 일관성
+  nts: withCompactFallback(searchNtsInterpretations),
   moel: searchMoelInterpretations,
   constitutional: searchConstitutionalDecisions,
   admin_appeal: searchAdminAppeals,
@@ -120,7 +123,7 @@ const GET_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<Loo
   interpretation: getInterpretationText,
   tax_tribunal: getTaxTribunalDecisionText,
   customs: getCustomsInterpretationText,
-  nts: getNtsInterpretationText,
+  nts: getNtsDecisionBody, // N2 자체 패치 #1: NOT_SUPPORTED → taxlaw.nts.go.kr 본문 조회
   moel: getMoelInterpretationText,
   constitutional: getConstitutionalDecisionText,
   admin_appeal: getAdminAppealText,
@@ -186,6 +189,7 @@ async function searchPrecedentDecisionsWithText(
     apiKey,
     detailLimit,
     full: false,
+    relevanceGate: true, // N2 패치 #2: 무관 판례 전문 자동첨부 차단
   })
   const text = evidence ? `${listText}\n\n▶ 관련 판례 상세\n${evidence.text}` : listText
 

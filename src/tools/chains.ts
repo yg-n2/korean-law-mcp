@@ -266,6 +266,7 @@ async function fetchPrecedentDetailForChain(
     detailLimit,
     full: false,
     detailMemo: search.detailMemo,
+    relevanceGate: true, // N2 패치 #2: 무관 판례 전문 자동첨부 차단
   })
   return evidence ? { text: evidence.text, isError: evidence.isError } : null
 }
@@ -1128,11 +1129,18 @@ export async function chainDocumentReview(
 
       const combinedPrecedents = combineStructuredPrecedentResults(precedentResults)
       if (combinedPrecedents) {
-        const evidenceO = await raceDeadline(dl, fetchPrecedentEvidence(apiClient, combinedPrecedents, {
+        // N2 패치 #2 보완(Opus 검토 권고 3): 병합 결과의 originalArgs는 첫 힌트 것이라
+        // 원 질의 대조가 다른 힌트로 찾은 판례를 오차단한다 — hit별 sourceQuery 대조만 적용
+        const gateSafeCombined = {
+          ...combinedPrecedents,
+          originalArgs: { ...combinedPrecedents.originalArgs, query: undefined },
+        }
+        const evidenceO = await raceDeadline(dl, fetchPrecedentEvidence(apiClient, gateSafeCombined, {
           apiKey: input.apiKey,
           detailLimit: 2,
           full: false,
           detailMemo,
+          relevanceGate: true, // N2 패치 #2: 무관 판례 전문 자동첨부 차단
         }))
         if (!evidenceO.ok) {
           parts.push(timedOutSection("관련 판례 상세", "get_decision_text"))

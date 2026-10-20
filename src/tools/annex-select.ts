@@ -76,10 +76,15 @@ export function findMatchingAnnex(
     // 단, 가지번호(1의2) 요청은 폴백 금지 — 유일 항목이 본번(별표 1)이어도 다른 별표라서,
     // 위 buildSelectorCandidates가 막은 "별표 1 무음 오선택"이 여기로 재개방되면 안 된다.
     const sole = annexList[0]
-    const unnumbered = sole && !String(sole.별표번호 || "").trim()
+    // [N2 패치 6] 본번 0 코드("000000")도 번호 없는 별표다 — 여권법 시행령 단일 별표가 이 코드로 와서
+    // 상류 4.15 판정(코드가 비어 있어야 번호 없음)만으로는 폴백이 막혔다(2026-10-20 실호출 회귀)
+    const soleCode = String(sole?.별표번호 || "").trim()
+    const zeroCode = /^0{6}$/.test(soleCode)
+    const unnumbered = sole && (!soleCode || zeroCode)
       && !String(sole.별표명 || "").match(ANNEX_NOTATION_RE)?.some(label => parseAnnexNumber(label))
     const requestedSub = fromAnnexCode(annexSelector.trim())?.sub ?? parseAnnexNumber(annexSelector)?.sub
-    if (annexList.length === 1 && unnumbered && !requestedSub) {
+    // [N2 패치 6] 상류 판정에 더해 별표번호 코드(본번≥1)·제목 앞 번호 표기가 있으면 폴백하지 않는다 — 둘 중 보수적인 쪽
+    if (annexList.length === 1 && unnumbered && !requestedSub && !hasIdentifiableAnnexNumber(sole)) {
       return annexList[0]
     }
     return undefined
@@ -100,6 +105,19 @@ export function findMatchingAnnex(
   }
   // knd 미지정/전체(5): 표(별표)를 서식보다 우선
   return matches.find(isTable) || matches[0]
+}
+
+/**
+ * [N2 패치] 항목 자체가 번호를 갖는지 — 별표번호가 유효한 6자리 코드(본번 ≥ 1)이거나
+ * 제목에 `[별표 N]`·`별지 제N호` 같은 번호 표기가 있으면 번호 있는 별표다.
+ */
+export function hasIdentifiableAnnexNumber(annex: AnnexItem): boolean {
+  const code = String(annex.별표번호 || "").trim()
+  const decoded = /^\d{6}$/.test(code) ? fromAnnexCode(code) : undefined
+  if (decoded && decoded.main > 0) return true
+  const title = String(annex.별표명 || "").replace(/<[^>]+>/g, "")
+  // 제목 안의 다른 별표 참조나 '별표 제39조 관련'은 항목 자체 번호가 아니다.
+  return new RegExp(`^\\s*\\[?\\s*(?:${ANNEX_KEYWORDS.join("|")})\\s*제?\\s*\\d+(?:\\s*의\\s*\\d+)?(?:\\s*호)?(?:\\s*서식)?(?=\\s|\\]|$)`).test(title)
 }
 
 export function buildSelectorCandidates(selector: string): Set<string> {
