@@ -12,6 +12,7 @@ import { DOMParser } from "@xmldom/xmldom"
 import type { LawApiClient } from "../lib/api-client.js"
 import { looseMatchLawName } from "../lib/law-search.js"
 import { detectAbolishedAdminRule } from "../lib/abolished-laws.js"
+import { throwIfRequestCancelled } from "../lib/session-state.js"
 
 // 확실한 행정규칙 접미사 — 미발견 시 ✗(환각 의심)로 보고
 const STRICT_ADMIN_SUFFIX = /(고시|훈령|예규|통칙)$/
@@ -126,6 +127,7 @@ export async function verifyAdminRuleCitation(
     }
     return `✗ ${label} — [NOT_FOUND] 행정규칙 DB에 해당 규칙 없음 (규칙명 오탈자 또는 존재하지 않는 규칙)`
   } catch (e) {
-    return `⚠ ${label} — 행정규칙 검색 실패: ${e instanceof Error ? e.message : String(e)}`
+    throwIfRequestCancelled() // 상류 verify-citations 규약: 취소만 다시 던진다
+    return `⚠ ${label} — 행정규칙 검색 실패: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`
   }
 }

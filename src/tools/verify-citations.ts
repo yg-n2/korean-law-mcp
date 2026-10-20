@@ -476,6 +476,7 @@ async function verifyOne(
       const adminHit = await tryVerifyAdminRuleCitation(apiClient, candidates, inputLabel, apiKey)
       if (adminHit) return adminHit
     } catch (e) {
+      throwIfRequestCancelled() // 상류 규약: 취소는 다시 던지고, 예산 소진·장애는 항목별 ⚠로 남긴다
       // Codex 검토(2026-09-02) 차단 1: 폴백의 429·HTML·빈 응답은 "확인 실패"이지 "없음"이 아니다.
       // 삼키고 ✗ NOT_FOUND로 확정하면 실존 행정규칙을 환각으로 오판하므로 ⚠(판정 불가)로 보고
       return `⚠ ${inputLabel} — 법령 DB 미매칭, 행정규칙 확인 실패(판정 불가): ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`
