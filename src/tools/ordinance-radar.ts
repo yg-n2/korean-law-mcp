@@ -21,10 +21,10 @@ import { resolvedLawMatches } from "../lib/law-search.js"
 import { rethrowIfFatal } from "../lib/fatal-errors.js"
 
 export const OrdinanceRadarSchema = z.object({
-  ordinSeq: z.string().optional().describe("자치법규 일련번호 (search_ordinance 결과의 [번호])"),
+  ordinSeq: z.string().optional().describe("자치법규 일련번호 (ordinSeq)"),
   id: z.string().optional().describe("ordinSeq 별칭 — 힌트가 id=로 안내하는 경우 대응"),
   ordinanceName: z.string().optional().describe("자치법규명 — 지정 시 검색 후 첫 결과 사용 (예: '서울특별시 광진구 주차장 설치 및 관리 조례')"),
-  query: z.string().optional().describe("ordinanceName 별칭 — 자연어 조례명으로 검색 (search_law 등 다른 도구와 규약 통일)"),
+  query: z.string().optional().describe("ordinanceName 별칭 — 자연어 조례명으로 검색"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
 }).refine(d => d.ordinSeq || d.id || d.ordinanceName || d.query, {
   message: "ordinSeq(또는 별칭 id)·ordinanceName·query 중 하나는 필수입니다",

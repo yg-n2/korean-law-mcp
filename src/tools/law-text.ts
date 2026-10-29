@@ -19,10 +19,10 @@ import { flattenAddendum, normalizeDate } from "./applicable-law.js"
 import { MAX_RESPONSE_SIZE, truncateResponse } from "../lib/schemas.js"
 
 export const GetLawTextSchema = z.object({
-  mst: z.string().optional().describe("법령일련번호 (search_law에서 획득)"),
-  lawId: z.string().optional().describe("법령ID (search_law에서 획득)"),
+  mst: z.string().optional().describe("법령일련번호 (MST)"),
+  lawId: z.string().optional().describe("법령ID"),
   jo: z.string().optional().describe("조문 번호. 자연어 표기 권장 — '제38조'·'제148조의2'를 그대로 넣으면 서버가 변환한다. 6자리 JO 코드 직접 지정 시 조번호 4자리 zero-pad + 의X 2자리: 제38조→003800, 제10조의2→001002, 제234조의2→023402(234002 아님). '부칙' 이면 부칙 원문(최근 공포부터)"),
-  efYd: z.string().optional().describe("기준일 또는 시행일자 (YYYYMMDD). 시행일이면 그 버전, 시행일이 아닌 날짜(건축허가일·사건일 같은 조회 기준일)면 그날 시행 중이던 버전으로 자동 보정한다(제명이 바뀌기 전 버전 포함). 현행 본문은 efYd 없이 lawId 로 조회할 것(MST 단독은 분리시행 법령이면 현행이 아닌 시행판일 수 있음). 시행예정본은 search_law 가 안내한 efYd 를 그대로 쓴다."),
+  efYd: z.string().optional().describe("기준일 또는 시행일자 (YYYYMMDD). 시행일이면 그 버전, 시행일이 아닌 날짜(건축허가일·사건일 같은 조회 기준일)면 그날 시행 중이던 버전으로 자동 보정한다(제명이 바뀌기 전 버전 포함). 현행 본문은 efYd 없이 lawId 로 조회한다(MST 단독은 분리시행 법령이면 현행이 아닌 시행판일 수 있음). 시행예정본은 그 시행일을 넣는다."),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달")
 }).refine(data => data.mst || data.lawId, {
   message: "mst 또는 lawId 중 하나는 필수입니다"

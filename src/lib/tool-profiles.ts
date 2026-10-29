@@ -29,6 +29,38 @@ export const V3_EXPOSED = new Set([
 ])
 
 /**
+ * 서버 안내문 — initialize 의 instructions 로 나간다.
+ * 도구끼리 넘겨주는 안내는 도구 설명에 두지 않고 여기 모은다(Claude 커넥터 디렉터리 정책:
+ * 도구 설명에 다른 도구·모델 동작 지시 금지). gate test 가 도구 설명 쪽을 막는다.
+ */
+export const SERVER_INSTRUCTIONS = [
+  "한국 법령 조회 서버. 도구 사용 순서:",
+  "- 법령·조례·행정규칙 본문: search_law 로 lawId·mst 를 얻은 뒤 get_law_text. 시행예정본은 search_law 가 안내한 efYd 를 그대로 넣는다.",
+  "- 여러 법령의 개정 여부를 한 번에 확인(준법 등록부 감시): execute_tool(tool_name=\"search_law_bulk\").",
+  "- 사건·처분 시점에 적용되던 법령과 경과조치: legal_analysis(mode=\"applicable_law\").",
+  "- 단일 조회로 답이 되면 search_law·get_law_text 를 쓰고, 여러 API 를 엮는 복합 질문만 legal_research.",
+  "- 조례 정비 대조: ordinance_radar 에 조례명(ordinanceName)을 주거나, execute_tool(tool_name=\"search_ordinance\") 결과의 일련번호(ordinSeq)를 넣는다.",
+  "- 노출 도구에 없는 자료(조세심판·관세·헌재·조약·영문법령·용어 등)는 discover_tools 로 찾고 execute_tool 로 실행한다.",
+].join("\n")
+
+/**
+ * 노출 도구의 사람용 제목 — tools/list 의 title·annotations.title 로 나간다.
+ * Claude 커넥터 디렉터리는 모든 도구에 title 을 요구한다(gate test 가 빠진 도구를 잡는다).
+ */
+export const TOOL_TITLES: Record<string, string> = {
+  legal_research: "법령 종합 리서치",
+  legal_analysis: "인용 검증·법령 분석",
+  search_law: "법령 검색",
+  get_law_text: "법령 조문 조회",
+  get_annexes: "별표·서식 조회",
+  search_decisions: "판례·결정례 검색",
+  get_decision_text: "판례·결정례 본문 조회",
+  ordinance_radar: "조례 정비 레이더",
+  discover_tools: "전문 도구 찾기",
+  execute_tool: "전문 도구 실행",
+}
+
+/**
  * discover_tools 말미 안내 — 돌려준 도구가 무엇인지에 따라 갈린다.
  *
  * 결과와 무관하게 "execute_tool로 실행하세요"만 말하면, 1-hop 진입점을 앞세운

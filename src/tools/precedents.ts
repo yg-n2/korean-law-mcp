@@ -268,7 +268,8 @@ function normalizeTaxlawBodyCandidate(value: unknown): string {
   return hasSubstantiveTaxlawBody(body) ? body : ""
 }
 
-function extractTaxlawEditorBody(actionData: any): string {
+/** 국세청 법령해석 본문 조회(customs-interpretations.ts)도 같은 응답 구조를 쓴다 */
+export function extractTaxlawEditorBody(actionData: any): string {
   const editorList = Array.isArray(actionData.dcmHwpEditorDVOList)
     ? actionData.dcmHwpEditorDVOList
     : []
@@ -321,7 +322,7 @@ async function fetchText(response: Response, context: string): Promise<string> {
   return text
 }
 
-async function fetchTaxlawAction(ntstDcmId: string, referer: string): Promise<any> {
+export async function fetchTaxlawAction(ntstDcmId: string, referer: string): Promise<any> {
   const body = new URLSearchParams({
     actionId: "ASIQTB002PR01",
     paramData: JSON.stringify({ dcmDVO: { ntstDcmId } }),

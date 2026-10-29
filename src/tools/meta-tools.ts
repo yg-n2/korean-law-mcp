@@ -89,7 +89,7 @@ export async function discoverTools(
 // ========================================
 
 export const ExecuteToolSchema = z.object({
-  tool_name: z.string().describe("실행할 도구 이름 (discover_tools로 확인한 이름)"),
+  tool_name: z.string().describe("실행할 전문도구 이름"),
   params: z.record(z.string(), z.unknown()).describe("도구에 전달할 파라미터 객체"),
 })
 

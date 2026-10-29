@@ -1,5 +1,51 @@
 # Changelog
 
+## [4.15.14] - 2026-10-26
+
+### Security
+
+- 알려진 의존성 취약점 10건(high 5·moderate 5)을 0건으로. 외부 보안 점검에서 "하위 패키지 kordoc 이 zod 3.25.76(고위험)을 쓴다"는 지적을 받았다.
+  - kordoc 4.18.2 → 4.24.8(고정 판 유지). kordoc 4.24.8 은 zod 4 로 옮겨 zod 3 을 더 끌고 오지 않는다. 쓰는 API(`parse(buffer, { ocr: false })`, `ParseResult`·`FileType` 타입)는 그대로이고, 선택 의존성 없이 설치한 환경의 별표 파싱(`verify:annex-runtime`)을 통과했다
+  - zod 4.6.2 → 4.6.7(GHSA-mrhx-c7xc-m3w5, 4.6.6 미만 대상)
+  - 개발용 vitest 4.1.11 → 4.1.12(@vitest/mocker 권고 2건), 하위 의존성 body-parser·fast-uri·hono·ip-address·markdown-it·vite 를 `npm audit fix` 로 수정판으로
+  - 테스트 1,380건 통과, `npm audit` 0건
+
+## [4.15.13] - 2026-10-25
+
+### Changed
+
+- Claude Code 플러그인(`.claude-plugin/plugin.json`)의 MCP 서버를 로컬 `npx korean-law-mcp@X.Y.Z` 에서 공개 서버 `https://mcp.gomdori.app/law`(type http)로 바꿨다. Claude 플러그인 디렉터리가 4.15.10·4.15.12 를 "고정 npx 실행·lockfile 설치" 사유로 정책 보류했고, 원격 연결이면 두 사유가 없다. 같은 주소를 MCP 커넥터로도 제출했다
+  - 키는 `apikey: ${user_config.api_key}` 헤더로 보낸다. `api_key` 는 선택(기본 빈 값)이고 비우면 공용 한도로 동작한다
+  - 실측(claude -p --plugin-dir): 키 설정 없이 search_law → get_law_text 정상. 같은 주소의 claude.ai 커넥터가 이미 있으면 Claude Code 가 플러그인 쪽 서버를 중복으로 보고 띄우지 않는다(도구는 한 벌만 보임)
+  - `privacyPolicyUrl`(https://pubax.org/law/privacy/) 추가. `verify:package` 는 npx 고정 대신 원격 주소를 확인한다
+  - 로컬 설치(`npx korean-law-mcp setup`)는 그대로다
+
+## [4.15.12] - 2026-10-25
+
+### Changed
+
+- 도구 설명·인자 설명에서 다른 도구를 부르는 안내를 뺐다(Claude 커넥터 디렉터리 정책: 도구 설명에 다른 도구·모델 동작 지시 금지). 빠진 안내 6곳(`search_law_bulk`·`applicable_law`·`legal_research` 사용 조건·`discover_tools`→`execute_tool` 순서·`search_law` 식별자 획득·`search_ordinance` 일련번호)은 initialize 의 `instructions`(`lib/tool-profiles` 의 `SERVER_INSTRUCTIONS`)로 옮겼다
+  - `tool-registry.gate.test.ts` 가 노출 도구 설명·인자 설명에 다른 도구 이름이 들어가면 막는다(자기 enum 값은 예외)
+  - 전후 비교(claude -p, 같은 질문 4개: 조문 조회·행위시법·여러 법령 개정 확인·조세심판 결정례): 고르는 도구와 순서가 같았고, 4.15.12 가 두 질문에서 호출 1회 적었다
+
+## [4.15.11] - 2026-10-25
+
+### Added
+
+- 노출 도구 10개에 사람용 제목을 붙였다: tools/list 의 `title` 과 `annotations.title`(예: `search_law` → "법령 검색", `legal_analysis` → "인용 검증·법령 분석"). Claude 커넥터 디렉터리가 모든 도구에 제목을 요구한다. 목록은 `lib/tool-profiles` 의 `TOOL_TITLES` 한 곳에 두고, 빠진 도구는 `tool-registry.gate.test.ts` 가 잡는다
+- 공개 서버 개인정보처리방침: https://pubax.org/law/privacy/
+
+## [4.15.10] - 2026-10-24
+
+### Added
+
+- 국세청 법령해석(`nts`) 본문 조회 (#178). 법제처 OPEN API 는 목록만 주지만, 검색 결과 상세링크의 `ntstDcmId`(국세법령정보시스템 문서 ID, 18자리)로 판례 폴백과 같은 taxlaw action 을 불러 본문을 받는다. `get_decision_text(domain="nts", id=<ntstDcmId 또는 상세링크 URL>)`
+  - 해석례는 판례와 달리 둘로 나뉘어 온다: `ntstDcmCntn` = 회신, 편집기 HTML = 사실관계·질의·관련법령. 판례 폴백처럼 하나만 고르면 회신이 빠지므로 요지·회신·본문을 따로 싣는다
+  - 실측: 서면-2021-법규기본-5629(회신 + 본문 3,660자), 서면-2021-징세-6702(회신 "기존해석례 … 참조"), 2007년 서면1팀-328. 없는 ID 는 HTTP 200 + `dcmDVO: null` 이라 `[NOT_FOUND]`
+  - 출처를 "국세법령정보시스템 공개 페이지(법제처 OPEN API 아님) — 원문 대조 권장"으로 표기하고 원문 링크를 붙인다
+  - 법제처 일련번호는 `ntstDcmId` 로 바꿀 길이 없어 종전처럼 `[NOT_SUPPORTED]` 를 내되, 이제 무엇을 넘기면 되는지 안내한다. taxlaw 외 호스트 링크는 호출하지 않는다
+- `search_decisions(domain="nts")` 결과에 `본문조회ID(ntstDcmId)` 줄 추가
+
 ## [4.15.9] - 2026-10-15
 
 ### Added
@@ -1449,3 +1495,322 @@ v4.0의 핵심 원칙은 **"신규 도구 최소화, 기존 시나리오 시스�
 - formatToolError: ZodError 자동 감지, 구조화된 출력
 - toMcpInputSchema: ZodEffects unwrap 후 JSON Schema 변환
 - 총 도구 수: 57 → 64
+
+
+## 옛 판 소개 (README 에서 옮김, 2026-10-24)
+
+README 를 정리하며 걷어 낸 판별 소개 중 위 절에 없던 내용(v4.7.0 조례 정비 레이더 출력 예시, v3.5 이전 판 소개·설계 이야기)을 그대로 옮겨 둔다.
+
+### v4.7.0 — 조례 정비 레이더 (`ordinance_radar`)
+
+**"상위법 바뀌었는데, 우리 조례는 아직 그대로 아닌가?"** — 조례 담당 공무원이 매년 반복하는 상위법 개정 추적을 한 번의 호출로.
+
+```
+korean-law "광진구 주차장 조례" → ordinance_radar(ordinanceName="...")
+
+📡 조례 정비 레이더
+조례: 서울특별시 광진구 주차장 설치 및 관리 조례 (시행 20260227)
+근거 상위법령 3건 대조:
+  ⚠️ 주차장법 — 현행 시행 20260603 (조례보다 약 4개월 뒤 개정 → 정비 검토 대상)
+  ✅ 주차장법 시행령 — 현행 시행 20250817 (조례 시행 시점까지 반영)
+  ⚠️ 주차장법 시행규칙 — 현행 시행 20260331 (조례보다 약 1개월 뒤 개정 → 정비 검토 대상)
+```
+
+- **근거법 자동 추출**: 조례 제1조(목적)의 「」 인용에서 근거 법률·시행령·시행규칙을 추출 ("같은 법 시행령" 축약 표현도 해석). 본문 전체가 아닌 목적 조문만 스캔해 별표의 무관 인용(감면대상 정의의 공직선거법 등) 과잉경보를 배제
+- **개정 대조**: 각 상위법의 현행 시행일 vs 조례 시행일을 대조해 정비 검토 대상을 자동 플래그, 후속 확인용 MST 동봉
+- 법제처 자치법규 연계 API(lnkOrd)는 커버리지가 낮아 미사용 — 조례 본문 표준 표기 파싱으로 대체
+
+
+### v3.5 — AI 법률 답변의 환각을 잡아내다
+
+**LLM이 지어낸 가짜 조문을 실시간으로 탐지.** 법제처 공식 DB로 모든 인용을 교차검증.
+
+```
+"민법 제750조에 따라 불법행위 손해배상을 청구하고,
+ 근로기준법 제60조 제1항은 연차유급휴가를 규정하며,
+ 상법 제401조의2 제7항에 따라 이사 책임을 물을 수 있고,
+ 형법 제9999조는 가중처벌을 정한다"
+```
+
+→ `verify_citations` 한 번으로 (실제 법제처 API 교차검증 결과):
+
+- ✓ 민법 제750조(불법행위의 내용) 실존
+- ✓ 근로기준법 제60조(연차 유급휴가) 제1항 실존
+- ✗ **상법 제401조의2 — 제7항 없음 (최대 제2항)**
+- ✗ **형법 제9999조 — 해당 조문 없음 (존재 범위: 제1조~제372조)**
+
+**ChatGPT·Claude가 쓴 법률 답변을 그대로 믿지 마세요.** 법률 AI 서비스, 로펌, 학생, 계약서 검토에서 신뢰도 체크 필수.
+
+---
+
+### v3.2.0+ — 자연어로 복합 분석
+
+사용법은 똑같습니다. **그냥 자연어로 물어보세요.** AI가 질문을 알아듣고, 필요한 분석을 자동으로 추가해줍니다.
+
+#### 과태료 받았는데, 감경 가능할까?
+
+```
+"식품위생법 영업정지 과태료 감경 가능?"
+```
+
+→ 위반 유형별 **처분 기준표** (1차·2차·3차 금액) + **벌칙 조항** 원문 + 실제로 **감경된 행정심판 사례** + 해당 조항 **개정 이력**까지 한 번에 나옵니다.
+
+#### 이 물건 수입하려는데, 법적으로 뭘 확인해야 하지?
+
+```
+"수입 통관 FTA 적용 확인"
+```
+
+→ **관세법** + **관세청 유권해석** + **FTA 조약 원문** + **세율 별표** + 관세 분쟁 시 **조세심판원 판결**까지. 예전에는 법제처·관세청·조세심판원·외교부 4곳을 따로 뒤져야 했습니다.
+
+#### 건축허가 처리, 어디서부터 시작하지?
+
+```
+"건축법 허가 절차"
+```
+
+→ **법적 근거** (법률→시행령→시행규칙) + **수수료·서식** + 관련 **훈령·예규·고시** + 우리 지자체 **조례 특칙** + **유권해석**까지 원스톱.
+
+#### 법 하나 고치면 뭐가 같이 바뀌어야 하지?
+
+```
+"건축법 영향도 분석"
+```
+
+→ **하위법령**(시행령·시행규칙) + 전국 **자치법규** 중 영향받는 것 + 관련 **행정규칙** 목록이 나옵니다.
+
+#### 이 법의 위임 사항, 다 만들어졌나?
+
+```
+"국민건강보험법 위임입법"
+```
+
+→ "시행령으로 정한다"고 돼 있는 조항 중 **아직 시행령이 안 만들어진 것**을 찾아줍니다.
+
+#### 이 조례, 상위법에 어긋나지 않나?
+
+```
+"주차 조례 상위법 적합성"
+```
+
+→ **헌법재판소 위헌 결정** + **행정심판 취소 사례** 중 비슷한 조례 관련 건을 검색하고, **상위법 근거**를 대조합니다.
+
+#### 이 조문, 언제 바뀌었고 판례는 어떻게 달라졌지?
+
+```
+"근로기준법 개정이력 타임라인"
+```
+
+→ **신구대조표** + 조문별 **개정 이력** + 해당 법령의 **판례·해석례**를 시간순으로 묶어줍니다.
+
+---
+
+> **사용법 변경 없음.** 기존처럼 자연어로 물어보면 됩니다. 질문에 따라 AI가 알아서 추가 분석을 붙입니다.
+>
+> 모든 결과 끝에 **"이어서 할 수 있는 조회"**가 제안됩니다. 복사해서 바로 이어가세요.
+
+<details>
+<summary>v3.2.1~v3.5.5 변경 이력</summary>
+
+**v3.5.5** — 법제처 API 봇 차단 우회 (긴급 핫픽스)
+
+법제처 OPEN API가 Node.js 기본 User-Agent(`undici/...`)를 봇으로 분류해 거부하기 시작 → fly.dev/Vercel 등 모든 클라우드 호스팅에서 `[EXTERNAL_API_ERROR] fetch failed` 또는 "사용자 정보 검증에 실패하였습니다" XML로 죽는 현상.
+
+- **`fetch-with-retry.ts`에 일반 브라우저 UA 기본 헤더 주입** — 호출자 코드 변경 0, 한 줄 패치로 모든 도구 복구. `LAW_USER_AGENT` 환경변수로 override 가능
+- 에러 메시지가 "정확한 서버장비의 IP주소 및 도메인주소를 등록해 주세요"여서 IP 화이트리스트 차단으로 오인되기 쉬웠음 — 실제 원인은 UA 검증
+- claude.ai 커스텀 커넥터로 `https://korean-law-mcp.fly.dev/mcp?oc=...` 사용하던 사용자 즉시 영향. v3.5.5 배포로 자동 복구
+
+**v3.5.4** — 실사용 피드백 반영: NOT_FOUND 명시 시그널 전면 도입
+
+사용자 피드백: "실사용하면 자꾸 답변 못 찾고 AI가 지맘대로 답변함. 못 찾으면 리턴값을 명확하게."
+
+**근본 원인**: 일부 도구가 조회 실패 시 `isError` 플래그를 세팅하지 않거나 "없습니다"만 반환 → LLM이 실패 감지 못하고 창작 답변 생성.
+
+- **`[NOT_FOUND]` / `[HALLUCINATION_DETECTED]` 머신 파싱 마커 전면 도입** — 모든 실패 응답에 기계적으로 감지 가능한 프리픽스 + "⚠️ LLM은 추측/생성 금지" 경고문 표준화
+- **`verify_citations`** — `failCount > 0`일 때 `isError: true` 설정. 환각 검출됐는데 "검증 성공"으로 오인되던 심각한 버그 수정
+- **`annex.ts` / `law-text.ts` / `article-detail.ts` 등 10+개 파일** — `isError: true` 누락 수정
+- **체인 도구 부분 실패 투명화** — `chains.ts`의 silent-drop 패턴 제거. 실패한 섹션도 `[NOT_FOUND / FAILED]` 마커와 사유를 명시 노출 (80자 → 200자 확장)
+- 신규 헬퍼 `notFoundResponse(message, suggestions?)`로 일관성 확보
+
+**v3.5.3** — `verify_citations` 실증 검증 후 3개 치명 버그 수정
+
+실제 법제처 API로 5건 테스트 → false negative 3건 발견 → 근본 원인 수정:
+
+- **"민법" → "난민법" 부분매칭 오매칭** — 기존 `chains.ts`의 `findLaws`/`scoreLawRelevance`가 이미 해결해둔 로직인데 verify_citations가 재사용하지 않고 자체 로직으로 중복 구현했던 것. 공용 모듈 `lib/law-search.ts`로 추출하여 양쪽 재사용 (중복 제거)
+- **원숫자(①②③…) 항번호 파싱 실패** — 법제처 API가 `항번호`를 `"① "` 형태로 리턴하는데 기존 `parseInt(raw.replace(/[^\d]/g, ""))`가 유니코드 원숫자를 제거해 NaN. 근로기준법 제60조 제1항이 실존함에도 "최대 제0항" 오판정 → `lib/article-parser.ts`에 `parseHangNumber()` 원숫자 매핑 유틸 추가
+- **짧은 법령명 검색 누락** — 법제처 lawSearch API가 `display=20`에서 "상법"을 결과 34번째로 리턴. `apiClient.searchLaw`에 display 파라미터 추가, verify_citations는 `searchDisplay=100`으로 호출
+
+검증 후 5/5 정확 판정 (위 예시 결과가 그 출력).
+
+**v3.5.2** — kordoc 2.3.0 → 2.4.0 업데이트 (별표/서식 파싱 엔진)
+
+**v3.5.1** — lite/full 프로필 체계 제거 (V3_EXPOSED 16개 고정 노출 도입 후 실질 미사용). `tool-profiles.ts`에서 `LITE_TOOLS`/`parseProfile`/`filterToolsByProfile` 제거, 헬스 엔드포인트 거짓 `profiles` 필드 → 정확한 `tools: { exposed: 16, total: 92 }` 로 교체. Breaking change 아님 (`?profile=lite`도 이미 무시되던 값)
+
+**v3.5.0** — Killer feature: `verify_citations` 인용 검증 + Critical 핫픽스 + 보안 강화
+
+- **`verify_citations`** 신규 — LLM 환각 방지. 사용자 텍스트에서 조문 인용 정규식 추출 + 직전 30자 lookback으로 법령명 역추적 + 법제처 DB 병렬 교차검증. 결과: ✓(실존) / ✗(없음, 존재 범위 제시) / ⚠(법령명 불명확)
+- **Critical 핫픽스** — v3.4.0 `full` 파라미터가 12개 도메인(tax_tribunal, customs, ftc, pipc, nlrc, acr, treaty, interpretation 등)에서 스키마에 필드가 없어 조용히 무시되던 문제 수정. `unified-decisions.ts`가 하위 핸들러 응답을 받은 뒤 `compactLongSections()` 후처리로 계단식 축약 일괄 적용
+- **보안 High 2건** — `fetch-with-retry.ts` 타임아웃/네트워크 에러에 API 키 포함 URL이 로그로 유출되던 문제 → `maskSensitiveUrl()`로 `OC=***` 마스킹. `trust proxy true` → `TRUST_PROXY` 환경변수(기본 `1`), X-Forwarded-For 스푸핑 rate limit 우회 차단
+- **품질 3건** — `decision-compact.ts` 날짜 정규식 경계 가드, TAIL 경계 `". "` 오탐 제거, `stripRepeatedSummary` 종료점 정확 탐지
+- **UX** — 체인 8개 description 구체화(LLM이 체인 선택 가능), 검색 결과 "💡 다음: get_law_text(...)" 힌트, `search_law` 약칭/오타 확장 자동 재시도, `query-router` 패턴 5개 추가, `discover_tools` 별칭 매칭 27개
+
+**v3.4.0** — 판례 응답 토큰 평균 74% 감축 + `get_decision_text`에 `full` 파라미터 추가
+
+법령 RAG 관점에서 판례 응답 구조를 재해석: 판시사항·판결요지·주문은 규범 재사용의 핵심이라 full 유지, "이유" 전문은 사안별 사실관계 나열이라 LLM이 대부분 소비만 하고 버림. 이 비대칭을 활용해 판례/헌재/행심(`precedent`/`constitutional`/`admin_appeal`) 3개 도메인에 **계단식 축약 + structured ref densify** 적용. `lib/decision-compact.ts` 신규:
+
+- **`compactBody`** — 전문/이유 섹션을 앞 800자 + 중략 마커 + 뒤 400자로 축약. 판결 종결어미(`~다.`, `~라 할 것이다.`)와 문장 경계 가드 내장. `minSave` 가드로 짧은 본문(1300자 이하)은 skip
+- **`densifyLawRefs`** — 참조조문의 괄호 설명 제거 (`제390조(채무불이행과 손해배상)` → `제390조`). 평균 40~55% 절감
+- **`densifyPrecedentRefs`** — 참조판례의 "선고"/"판결" 제거 + 날짜 공백 압축 (`2020. 3. 26. 선고 2018두56077 판결` → `2020.3.26. 2018두56077`)
+- **`stripRepeatedSummary`** — 법제처 API가 판시/요지를 본문 앞쪽에 또 섞어 보내는 케이스 탐지·제거
+
+`get_decision_text`에 `full?: boolean` 파라미터 추가. 미지정(기본)=축약, `true`=전문. 응답 중간의 `⋯ 중략 N자 (full=true로 전문 조회) ⋯` 마커가 재호출 힌트 역할.
+
+**실측 (실제 법제처 API, 고정 ID 8건)**:
+
+| 도메인 | Before avg | After avg | 절감 |
+|---|---:|---:|---:|
+| 판례 | 5,230 chars | 3,049 chars | **-42%** |
+| 헌재 | 8,368 chars | 1,703 chars | **-80%** |
+| 행심 | 8,429 chars | 1,491 chars | **-82%** |
+| **종합** | **7,606 chars (1,901 tok)** | **1,960 chars (490 tok)** | **-74%** |
+
+긴 결정례(15,000자↑)에서 **80~89%** 절감이 가장 두드러짐. 짧은 본문은 `minSave` 가드로 원본 유지. 품질 손실 없음 (판시·요지·주문은 항상 full).
+
+부가로 **ListTools 페이로드도 -14%** (9,671 → 8,296 bytes, 344 토큰↓): `chain_*` 8개 description 간결화, `search_decisions`/`get_decision_text` 필드 describe에서 17 도메인 중복 표기 제거.
+
+**v3.3.1** — 법령 약칭 사전 대폭 확장 (11 → 52개, +41)
+
+lexdiff에서 "산안기준규칙" 질의가 법제처 aiSearch의 키워드 부분매칭으로 **국가표준기본법**으로 환각되던 사례가 발견돼 `resolveLawAlias`의 `LAW_ALIAS_ENTRIES`를 대폭 보강. 다빈도 노무/안전(산안법·중처법·근기법 등), 개인정보/정보통신(개보법·정보통신망법), 청렴/이해충돌(청탁금지법·이해충돌방지법), 공공계약(국가계약법·지방계약법), 부동산/임대차(주임법·상임법·부거법), 공정거래(공정거래법·하도급법·약관법·표시광고법·가맹사업법), 금융(자본시장법·특금법·전금법), 도시계획(국토계획법·도정법), 환경(감염병예방법·대기환경법), 운수(여객운수법·화물운수법), 민·형사 절차(민소법·형소법·민집법), 사회보험(국건법·산재보험법·고보법), 통신(전기통신사업법) 커버. `api-client.ts`/`law-parser.ts`가 이미 `resolveLawAlias`를 사용 중이라 **데이터 추가만으로 기존 검색 경로가 자동 혜택**. 신규 41개 + 회귀 4개 포함 **45/45 테스트 통과**.
+
+**v3.3.0** — HTTP stateless 모드 전환 + kordoc 2.3.0
+
+원격 서버(`korean-law-mcp.fly.dev`)가 주기적으로 OOM kill로 재시작되면서 기존 세션 ID가 무효화되던 문제를 근본 해결. MCP 공식 stateless 패턴(`sessionIdGenerator: undefined`)으로 전환하여 매 요청마다 fresh `Server + Transport`를 생성, 요청 종료 시 즉시 해제. in-memory 세션 Map·InMemoryEventStore·idle cleanup 전부 제거로 누수 원인 소거. 재시작·스케일아웃·배포 모두 무손실. `GET /mcp`·`DELETE /mcp`는 공식 예제와 동일하게 `405`. API 키는 `AsyncLocalStorage`로 요청 단위 격리 (race condition 방지).
+
+- **HTTP stateless 전환** — [src/server/http-server.ts](src/server/http-server.ts) (참고: `@modelcontextprotocol/sdk/examples/server/simpleStatelessStreamableHttp.js`)
+- **kordoc 2.2.5 → 2.3.0** — 별표/서식 파싱 엔진 업데이트
+- **세션 관리 코드 완전 제거** — `sessions` Map, `MAX_SESSIONS`, idle cleanup `setInterval`, `InMemoryEventStore`, POST/GET/DELETE 분기 로직 삭제 (v3.2.3의 LRU eviction 접근을 대체)
+
+**v3.2.3** — HTTP 세션 안정성 중간 개선. `MAX_SESSIONS` 100→500 + LRU eviction. _v3.3.0의 stateless 전환으로 대체됨._
+
+**v3.2.2** — 별표/서식 조회 도구(`get_annexes`)를 기본 노출 도구에 추가. **노출 도구 수 14 → 15개**. 환불·감경 키워드 질의 시 별표 자동 조회 로직 추가.
+
+**v3.2.1** — kordoc 2.2.5 업데이트.
+
+</details>
+
+<details>
+<summary>개발자용: 시나리오 기술 상세</summary>
+
+기존 8개 체인 도구에 `scenario` 파라미터가 추가됐습니다. (노출 도구 수는 v3.5의 `verify_citations`, v4.0의 `impact_map`까지 추가돼 17개)
+
+| scenario | 호스트 체인 | 추가 조회 |
+|---------|-----------|----------|
+| `penalty` | chain_action_basis | 별표 처분기준표 + 벌칙 조항 + 감경 행심 + 개정이력 |
+| `customs` | chain_full_research | 관세청 해석례 + 조세심판 + FTA 조약 + 세율표 + 3단비교 |
+| `manual` | chain_procedure_detail | 법체계(행정규칙) + 해석례 + 연계 자치법규 |
+| `delegation` | chain_law_system | 위임법령 현황 + 법체계(행정규칙) + 조문 이력 |
+| `impact` | chain_law_system | 법체계 트리 + 연계 조례 + 조문별 연계 + 행정규칙 |
+| `timeline` | chain_amendment_track | 판례 + 해석례 시계열 매핑 |
+| `compliance` | chain_ordinance_compare | 헌재 위헌 결정 + 행심 위법 취소 + 상위법 근거 |
+
+시나리오는 쿼리 키워드에서 **자동 감지**되거나, `scenario` 파라미터로 **직접 지정**할 수 있습니다.
+
+**기타 개선:**
+- 법령체계도(`get_law_system_tree`)에 행정규칙(훈령/예규/고시) 출력 추가
+- 법령 검색 3차 fallback — 복합 쿼리에서 법령명 패턴 자동 추출
+- `chain_action_basis` 판례/해석례 검색 정확도 향상 (법령명 기반 검색)
+
+</details>
+
+<details>
+<summary>v3.1.0~v3.1.5 변경 이력</summary>
+
+**v3.1.5** — kordoc 2.2.4 + 문서 파싱 엔진 강화. README 현행화.
+
+**v3.1.4** — kordoc 2.2.4 업데이트. 병합 셀 HTML `<table>` 출력, markdownToHwpx 서식 강화.
+
+**v3.1.3** — 검색 결과 없음 힌트 통합 (18개 도구). 세션 정리 주기 단축 (30분→10분).
+
+**v3.1.2** — kordoc 2.2.1 업데이트. GFM 테이블 특수문자 이스케이프 및 pipe 충돌 방지.
+
+**v3.1.1** — kordoc 2.1→2.2 업데이트.
+
+### v3.1.0 — Production Hardening
+
+실사용 점검 기반 20개 파일 수정. 잠재적 버그, 보안, 안정성 일괄 개선.
+
+- **truncateResponse 누락 일괄 수정** — 17개 도구에서 50KB 응답 제한 미적용 수정
+- **HTTP 서버 세션 제한** — MAX_SESSIONS=100 추가, 503 응답 (DoS 방어)
+- **CORS 와일드카드 경고** — 미설정 시 stderr 경고 로그 추가
+- **파라미터 오염 방어** — `search_decisions`/`get_decision_text`의 options에서 핵심 필드 덮어쓰기 차단
+- **체인 도구 안정성** — 인증 에러(401/403/429) 즉시 전파, findLaws 안전 래핑
+- **API 클라이언트** — throwIfError에서 response body 소비 (스트림 누수 방지)
+- **CLI 개선** — REPL 모드 Ctrl+C 2회 강제종료 구현
+- **SSE 서버 제거** — 사용되지 않는 데드코드 삭제 (HTTP 서버가 SSE 스트리밍 지원)
+- **데드 코드/의존성 정리** — `zod-to-json-schema`, ordinance 힌트, `start:sse` script
+
+</details>
+
+<details>
+<summary>v3.0.x 변경 이력</summary>
+
+**v3.0.2** — Unified Architecture + Setup Wizard
+
+법제처 41개 API를 89개 MCP 도구로 구조화했던 v2.
+v3는 같은 41개 API를 **14개 도구**로 재압축했습니다 (v3.2.2 이후 15개, v4.3에서 19개, v4.4.0에서 통폐합으로 9개, 현재 10개).
+
+| | 법제처 원본 | v2 | v3 |
+|---|:---:|:---:|:---:|
+| API/도구 수 | 41 | 89 | **14** |
+| AI 컨텍스트 비용 | - | ~110 KB | **~20 KB** |
+| 기능 커버리지 | - | 100% | **100%** |
+| 프로필 관리 | - | lite/full 분리 | **단일 (불필요)** |
+
+#### 왜 89개가 14개가 됐나
+
+v2의 실수: API 하나당 도구 하나. 직관적이지만, AI 입장에서는 89개 스키마를
+전부 읽어야 해서 **컨텍스트의 절반을 도구 목록에 소비**했습니다.
+
+v3의 접근 전환: 비슷한 패턴의 도구를 `domain` 파라미터 하나로 통합.
+판례·헌재·조세심판·공정위 등 **18개 도메인**이
+`search_decisions(domain)` + `get_decision_text(domain)` **2개**로 합쳐졌습니다.
+
+나머지 전문 도구(용어, 별표, 이력 등)는 그대로 작동하되,
+`discover_tools` → `execute_tool`로 필요할 때만 접근합니다.
+
+#### 사용자 입장에서 뭐가 좋아지나
+
+- **AI가 더 정확함** — 89개 중 고르던 AI가, 14개만 보고 즉시 판단
+- **응답 속도 체감 향상** — 컨텍스트 82% 절감
+- **설정 단순화** — lite/full 프로필 선택 불필요. 모든 클라이언트에서 동일한 14개
+- **17개 결정례 도메인 즉시 접근** — discover 거치지 않고 바로 검색
+
+#### 기타 변경
+
+- **kordoc 1.6 → 2.2.5** — 문서 파싱 엔진 업그레이드 (XLSX/DOCX 지원, 보안 강화, 양식 채우기)
+- **행정심판 전문 조회 버그 수정** — API 응답 키 fallback 추가
+- **영문법령 전문 조회 버그 수정** — 신형 API 응답 구조 지원
+
+#### 개발자에게
+
+MCP 도구 설계에서 **도구 수 ≠ 기능 수**입니다.
+41개 API를 89개로 펼쳤다가 다시 14개로 접은 이 과정이
+"적정 추상화 수준"을 찾는 여정이었습니다.
+
+핵심 패턴: **Dispatch Table + Domain Enum**.
+기존 handler 함수는 한 줄도 수정하지 않았습니다.
+
+</details>
+
+<details>
+<summary>v2.x 변경 이력</summary>
+
+**v2.3.2** — 운영 코드 품질 개선 (47파일, -179줄). 이모지/장식 축소, 체인 캐시, 에러 처리 통일.
+
+**v2.3.0** — 도구 프로필 (lite/full), URL 쿼리 API 키, kordoc 통합 파서.
+
+**v2.2.0** — 23개 신규 도구 (64→87). 조약, 법령-자치법규 연계, 문서분석 엔진.
+
+**v1.8~1.9** — 체인 도구 8개, 일괄 조문 조회, AI 검색 필터, 구조화 에러 포맷.
+
+</details>

@@ -17,7 +17,7 @@
 
 브랜치 분기 시점: `ad2d620` (upstream v4.9.7)
 
-### 1. 국세청 예규·법령해석 본문 조회 (2026-08-13)
+### 1. 국세청 예규·법령해석 본문 조회 (2026-08-13) — **2026-10-29 은퇴(상류 4.15.10이 대체)**
 - **무엇을**: `get_decision_text(domain="nts")`가 `[NOT_SUPPORTED]` 대신
   국세법령정보시스템(taxlaw.nts.go.kr) `action.do`(ASIQTB002PR01)로 본문을 조회
 - **왜**: 법제처 OPEN API는 국세청 법령해석 목록만 제공 — 예규 원문 인용이 불가능했음.
@@ -284,6 +284,21 @@
 - **Fable r1(수정 후 배포) 반영**: 행정규칙 폴백·검색 catch 2곳에 `throwIfRequestCancelled()`(상류 verify-citations 규약 — 취소만 다시
   던지고 예산 소진·장애는 항목별 ⚠), 사유 200자 제한. 게이트 실호출 증적 보강(관련 판례 전문 첨부·무관 판례 생략 모두 게시본과 동일).
   보고서 `docs\reviews\law-4159-sync-fable-review-r1.md`(번들 저장소)
+
+### upstream 동기화 (2026-10-29, v4.15.9 → v4.15.14) — 의존성 보안(zod GHSA-mrhx-c7xc-m3w5) + 패치 1 은퇴
+- **계기**: zod <4.6.6 High(크기 제한 컬렉션 검증 중 메모리 고갈). 게시본은 zod 4.6.2 + kordoc 4.18.2 안 중첩 zod 3.25.76.
+  상류 4.15.14(32c294e)가 kordoc 4.24.8(zod 4)·zod 4.6.7로 올림 → 상류 8커밋을 `git merge --squash`, 작업 브랜치 `n2-sync-41514`
+- **상류가 대체해 걷어낸 것**: 패치 1(nts 본문) — 상류 4.15.10(4ccedb0)이 `getNtsInterpretationText`로 같은 기능을 구현.
+  N2판은 `extractTaxlawEditorBody(...) || ntstDcmCntn`이라 편집기 본문(사실관계·질의)이 있으면 회신(`ntstDcmCntn`)이 빠졌다
+  (상류 실측 10-24: 해석례는 둘로 나뉘어 옴). `nts-body.ts`·`nts-body.test.ts` 삭제, GET_HANDLERS.nts는 상류 핸들러로.
+  출력 표기 변화: 회신일자 → 상류 표기, 목록에 본문조회ID 줄
+- **충돌 1곳**: `law-text.ts` efYd 설명 — 상류 4.15.12 gate 시험(노출 도구 설명이 다른 도구 이름을 부르지 않음)에 맞춰
+  R7 문구에서 도구명("search_law 가 안내한")을 빼고 "lawId 로 조회·MST 단독은 현행이 아닐 수 있음"만 유지
+- **유지**: 패치 2·4·5·6·7·8, 9 R7(문구 변경)
+- **검증**: `tsc --noEmit`, vitest 174파일 1,449 통과, `verify:annex-runtime`(optional 없이), `npm audit --omit=dev` High 0
+  (Moderate 1: `@hono/node-server` 2.1.1 — SDK HTTP 전송용, stdio 미사용, 상류 lockfile 유지), `npm ls zod` 4.6.7 단일.
+  tools/list 게시본 대비 10개·입력 스키마 동일(설명·title·instructions만 상류 변경)
+- **검토**: 계획 Fable r1 `docseviews\zod-vuln-plan-fable-review-r1.md`(번들 저장소)
 
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)

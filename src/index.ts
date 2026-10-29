@@ -14,6 +14,7 @@ import { startHTTPServer } from "./server/http-server.js"
 import { parseHttpPort } from "./server/http-config.js"
 import { readExecutionLimits, type ExecutionLimits } from "./lib/execution-limits.js"
 import { VERSION } from "./version.js"
+import { SERVER_INSTRUCTIONS } from "./lib/tool-profiles.js"
 
 // API 클라이언트 초기화 (LAW_OC 또는 KOREAN_LAW_API_KEY 지원)
 const LAW_OC = process.env.LAW_OC || process.env.KOREAN_LAW_API_KEY || ""
@@ -28,7 +29,7 @@ const jsonSchemaValidator = new AjvJsonSchemaValidator()
 function createServer(executionLimits: ExecutionLimits = readExecutionLimits()): Server {
   const s = new Server(
     { name: "korean-law", version: VERSION },
-    { capabilities: { tools: {} }, jsonSchemaValidator }
+    { capabilities: { tools: {} }, instructions: SERVER_INSTRUCTIONS, jsonSchemaValidator }
   )
   registerTools(s, apiClient, executionLimits)
   return s

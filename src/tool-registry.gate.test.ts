@@ -8,7 +8,8 @@ import { describe, it, expect, beforeEach } from "vitest"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
-import { registerTools, findOversizedArg, MAX_ARG_CHARS, MAX_SHORT_ARG_CHARS, MAX_TEXT_ARG_CHARS } from "./tool-registry.js"
+import { registerTools, findOversizedArg, allTools, MAX_ARG_CHARS, MAX_SHORT_ARG_CHARS, MAX_TEXT_ARG_CHARS } from "./tool-registry.js"
+import { SERVER_INSTRUCTIONS } from "./lib/tool-profiles.js"
 import { maskKeysInText } from "./lib/fetch-with-retry.js"
 import { lawCache } from "./lib/cache.js"
 import type { LawApiClient } from "./lib/api-client.js"
@@ -98,5 +99,43 @@ describe("registerTools 게이트 배선", () => {
     const second = await client.listTools()
     expect(first.tools.length).toBe(10)
     expect(second).toEqual(first)
+  })
+})
+
+describe("tools/list 도구 제목", () => {
+  it("노출 도구마다 title 과 annotations.title 이 있다 (Claude 커넥터 디렉터리 요건)", async () => {
+    const client = await connect({})
+    const { tools } = await client.listTools()
+    const titles = tools.map(t => t.title)
+    expect(tools.length).toBeGreaterThan(0)
+    for (const t of tools) {
+      expect(t.title, t.name).toBeTruthy()
+      expect(t.annotations?.title, t.name).toBe(t.title)
+      expect(t.annotations?.readOnlyHint, t.name).toBe(true)
+    }
+    expect(new Set(titles).size).toBe(titles.length)
+  })
+})
+
+describe("도구 설명에 다른 도구 안내 없음 (커넥터 디렉터리 정책)", () => {
+  it("노출 도구의 설명·인자 설명이 다른 도구 이름을 부르지 않는다", async () => {
+    const client = await connect({})
+    const { tools } = await client.listTools()
+    const names = allTools.map(t => t.name)
+    for (const t of tools) {
+      const params = Object.values((t.inputSchema.properties ?? {}) as Record<string, { description?: string; enum?: string[] }>)
+      const texts = [t.description ?? "", ...params.map(p => p.description ?? "")]
+      // legal_analysis 의 mode 값(verify_citations 등)처럼 자기 인자 값과 같은 이름은 다른 도구 안내가 아니다
+      const ownValues = new Set(params.flatMap(p => p.enum ?? []))
+      for (const other of names.filter(n => n !== t.name && !ownValues.has(n))) {
+        for (const text of texts) expect(text.includes(other), `${t.name} → ${other}`).toBe(false)
+      }
+    }
+  })
+
+  it("도구 사이 안내는 서버 안내문(instructions)에 있다", () => {
+    for (const hint of ["search_law_bulk", "applicable_law", "discover_tools", "execute_tool", "get_law_text"]) {
+      expect(SERVER_INSTRUCTIONS).toContain(hint)
+    }
   })
 })

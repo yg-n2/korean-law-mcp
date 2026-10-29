@@ -18,10 +18,9 @@ import { searchInterpretations, getInterpretationText } from "./interpretations.
 import { searchTaxTribunalDecisions, getTaxTribunalDecisionText } from "./tax-tribunal-decisions.js"
 import {
   searchCustomsInterpretations, getCustomsInterpretationText,
-  searchNtsInterpretations,
+  searchNtsInterpretations, getNtsInterpretationText,
   searchMoelInterpretations, getMoelInterpretationText,
 } from "./customs-interpretations.js"
-import { getNtsDecisionBody } from "./nts-body.js" // N2 자체 패치 #1: 예규 본문 조회
 import { searchConstitutionalDecisions, getConstitutionalDecisionText } from "./constitutional-decisions.js"
 import { searchAdminAppeals, getAdminAppealText } from "./admin-appeals.js"
 import {
@@ -123,7 +122,7 @@ const GET_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<Loo
   interpretation: getInterpretationText,
   tax_tribunal: getTaxTribunalDecisionText,
   customs: getCustomsInterpretationText,
-  nts: getNtsDecisionBody, // N2 자체 패치 #1: NOT_SUPPORTED → taxlaw.nts.go.kr 본문 조회
+  nts: getNtsInterpretationText,
   moel: getMoelInterpretationText,
   constitutional: getConstitutionalDecisionText,
   admin_appeal: getAdminAppealText,
@@ -249,7 +248,7 @@ export async function searchDecisions(
 
 export const GetDecisionTextSchema = z.object({
   domain: z.enum(DOMAINS).describe("도메인 선택 (enum 값 참조)"),
-  id: z.string().describe("일련번호/ID (search 결과에서 획득)"),
+  id: z.string().describe("일련번호/ID (search 결과에서 획득. nts는 본문조회ID(ntstDcmId))"),
   full: z.boolean().optional().describe("true=본문 전문 그대로. 미지정=이유/전문 섹션 계단식 축약 (판시·요지·주문은 항상 full)"),
   options: z.record(z.string(), z.unknown()).optional().describe(
     "도메인별 옵션. treaty:{chrClsCd:'010202'(한)/'010203'(영)} english_law:{mst,lawName} prec/constitutional/admin_appeal/interpretation:{caseName}"

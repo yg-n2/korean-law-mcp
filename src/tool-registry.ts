@@ -14,7 +14,7 @@ import { RequestExecutionBudget, readExecutionLimits, type ExecutionLimits } fro
 import { truncateResponse } from "./lib/schemas.js"
 import { getRequestSignal, requestContext, runWithRequestContext, throwIfRequestCancelled } from "./lib/session-state.js"
 import { discoverTools, DiscoverToolsSchema, executeTool, ExecuteToolSchema, setAllToolsRef } from "./tools/meta-tools.js"
-import { V3_EXPOSED } from "./lib/tool-profiles.js"
+import { V3_EXPOSED, TOOL_TITLES } from "./lib/tool-profiles.js"
 import { searchDecisions, SearchDecisionsSchema, getDecisionText, GetDecisionTextSchema } from "./tools/unified-decisions.js"
 
 // Tool imports
@@ -89,7 +89,7 @@ export const allTools: McpTool[] = [
   // === 법령 검색/조회 ===
   {
     name: "search_law",
-    description: "[법령검색] 법령명·조례명·행정규칙명 키워드검색 → lawId, mst 획득. 지자체 조례·규칙(자치법규), 훈령·예규·고시(행정규칙)도 검색 — 0건 시 자치법규/행정규칙으로 자동 폴백(예: '광진구 복무조례', '외국환거래규정'). 약칭 자동변환. 제명변경·시행예정 개정 자동 병기. 폐지된 법령·행정규칙은 폐지 사실과 후속(통합) 규정을 자동 안내. 법령·조례·행정규칙 조회 전 식별자 확보용. 여러 법령의 개정 여부를 한 번에 확인(준법 등록부 감시)하려면 execute_tool(tool_name=\"search_law_bulk\").",
+    description: "[법령검색] 법령명·조례명·행정규칙명 키워드검색 → lawId, mst 획득. 지자체 조례·규칙(자치법규), 훈령·예규·고시(행정규칙)도 검색 — 0건 시 자치법규/행정규칙으로 자동 폴백(예: '광진구 복무조례', '외국환거래규정'). 약칭 자동변환. 제명변경·시행예정 개정 자동 병기. 폐지된 법령·행정규칙은 폐지 사실과 후속(통합) 규정을 자동 안내. 법령·조례·행정규칙 조회 전 식별자 확보용.",
     schema: SearchLawSchema,
     handler: searchLaw
   },
@@ -101,7 +101,7 @@ export const allTools: McpTool[] = [
   },
   {
     name: "get_law_text",
-    description: "[법령조회] 조문 전문 조회. mst/lawId 필수, jo로 특정 조문만 가능 — jo는 '제148조의2' 같은 자연어 조문 표기를 그대로 받는다(권장). 6자리 JO 코드를 직접 쓰려면 조번호 4자리 zero-pad + 의X 2자리: 제10조의2→001002, 제234조의2→023402(234002 아님). jo='부칙' 이면 부칙 원문(시행일·경과조치, 최근 공포부터). 과거 시점 본문은 efYd 에 그 날짜를 넣으면 그날 시행 중이던 버전으로 자동 보정한다(제명이 바뀌기 전 버전 포함). 적용 법령 판단·경과조치까지 필요하면 legal_analysis(mode=applicable_law).",
+    description: "[법령조회] 조문 전문 조회. mst/lawId 필수, jo로 특정 조문만 가능 — jo는 '제148조의2' 같은 자연어 조문 표기를 그대로 받는다(권장). 6자리 JO 코드를 직접 쓰려면 조번호 4자리 zero-pad + 의X 2자리: 제10조의2→001002, 제234조의2→023402(234002 아님). jo='부칙' 이면 부칙 원문(시행일·경과조치, 최근 공포부터). 과거 시점 본문은 efYd 에 그 날짜를 넣으면 그날 시행 중이던 버전으로 자동 보정한다(제명이 바뀌기 전 버전 포함).",
     schema: GetLawTextSchema,
     handler: getLawText
   },
@@ -609,7 +609,7 @@ export const allTools: McpTool[] = [
   // 원본 도구는 allTools에 유지 — 직접 CallTool/execute_tool 하위호환.
   {
     name: "legal_research",
-    description: "[⛓리서치] 다단계 법령 리서치 통합 — 여러 API를 병렬로 엮는 복합 질문 전용. task: full_research=도메인·법령명 불명확한 자연어 질문 폴백(기본값, 예 '음주운전 처벌 기준') | law_system=법률·시행령·시행규칙 3단+위임+별표(예 '관세법 체계') | action_basis=처분·허가의 법적 근거+해석례+판례+행심(예 '영업정지 근거') | dispute_prep=불복·소송 준비, 판례+심판례+도메인 결정례(예 '과세처분 불복') | amendment_track=개정 이력+신구대조+연혁(예 '2023년 개정 뭐 바뀜') | ordinance_compare=조례 전국 비교+상위법 적합성(예 '서울시 주차 조례') | procedure_detail=절차·수수료·별표서식(예 '건축허가 절차') | document_review=계약서·약관 조항 리스크+근거법령(text 필수). scenario(선택): 확장 시나리오 — time_travel(두 시점 본문 diff)·timeline·penalty·action_plan·delegation·impact·compliance·customs·manual. 미지정 시 쿼리에서 자동 감지되며, task별 호환 조합은 scenario 파라미터 설명 참조. 단일 조회로 답이 되면 search_law/get_law_text 쓸 것.",
+    description: "[⛓리서치] 다단계 법령 리서치 통합 — 여러 API를 병렬로 엮는 복합 질문 전용. task: full_research=도메인·법령명 불명확한 자연어 질문 폴백(기본값, 예 '음주운전 처벌 기준') | law_system=법률·시행령·시행규칙 3단+위임+별표(예 '관세법 체계') | action_basis=처분·허가의 법적 근거+해석례+판례+행심(예 '영업정지 근거') | dispute_prep=불복·소송 준비, 판례+심판례+도메인 결정례(예 '과세처분 불복') | amendment_track=개정 이력+신구대조+연혁(예 '2023년 개정 뭐 바뀜') | ordinance_compare=조례 전국 비교+상위법 적합성(예 '서울시 주차 조례') | procedure_detail=절차·수수료·별표서식(예 '건축허가 절차') | document_review=계약서·약관 조항 리스크+근거법령(text 필수). scenario(선택): 확장 시나리오 — time_travel(두 시점 본문 diff)·timeline·penalty·action_plan·delegation·impact·compliance·customs·manual. 미지정 시 쿼리에서 자동 감지되며, task별 호환 조합은 scenario 파라미터 설명 참조.",
     schema: LegalResearchSchema,
     handler: legalResearch
   },
@@ -715,13 +715,13 @@ export const allTools: McpTool[] = [
   // === 메타 도구 (lite 프로필용) ===
   {
     name: "discover_tools",
-    description: "[메타] 위 도구로 안 되는 경우. 전문도구(조세심판·관세·헌재·행심·공정위·개인정보위·노동위·학칙·조약·영문법령·용어 등 80+개) 카테고리 검색",
+    description: "[메타] 전문도구(조세심판·관세·헌재·행심·공정위·개인정보위·노동위·학칙·조약·영문법령·용어 등 80+개) 카테고리 검색. 도구 이름과 설명을 돌려준다",
     schema: DiscoverToolsSchema,
     handler: discoverTools
   },
   {
     name: "execute_tool",
-    description: "[메타] discover_tools 결과 도구를 프록시 실행. tool_name + params",
+    description: "[메타] 전문도구를 이름(tool_name)과 인자(params)로 실행",
     schema: ExecuteToolSchema,
     handler: executeTool
   },
@@ -813,9 +813,11 @@ function listTools() {
   listToolsResult ??= {
     tools: exposedTools.map(tool => ({
       name: tool.name,
+      title: TOOL_TITLES[tool.name],
       description: `${SERVICE_NAME} — ${tool.description}`,
       inputSchema: toMcpInputSchema(tool.schema),
       annotations: {
+        title: TOOL_TITLES[tool.name],
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
