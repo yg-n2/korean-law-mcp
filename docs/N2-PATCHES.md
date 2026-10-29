@@ -296,7 +296,10 @@
   R7 문구에서 도구명("search_law 가 안내한")을 빼고 "lawId 로 조회·MST 단독은 현행이 아닐 수 있음"만 유지
 - **유지**: 패치 2·4·5·6·7·8, 9 R7(문구 변경)
 - **검증**: `tsc --noEmit`, vitest 174파일 1,449 통과, `verify:annex-runtime`(optional 없이), `npm audit --omit=dev` High 0
-  (Moderate 1: `@hono/node-server` 2.1.1 — SDK HTTP 전송용, stdio 미사용, 상류 lockfile 유지), `npm ls zod` 4.6.7 단일.
+  (Moderate 1: `@hono/node-server` 2.1.1 — `src/index.ts`→`server/http-server.ts`→SDK `streamableHttp.js` 정적 import라 stdio에서도
+  모듈은 로드되나 HTTP 리스너를 열지 않아 공격 경로 없음, 상류 lockfile 유지), `npm ls zod` 4.6.7 단일.
+  패치 1 은퇴로 일련번호 입력 시 안내가 `[ID_MISMATCH]` → 상류 `[NOT_SUPPORTED]`(링크·18자리 ntstDcmId 안내)로 바뀜.
+  kordoc 4.24.8의 한글 COM(PowerShell) 폴백은 `filePath`가 있을 때만 — 우리는 buffer만 넘겨 도달 불가
   tools/list 게시본 대비 10개·입력 스키마 동일(설명·title·instructions만 상류 변경)
 - **검토**: 계획 Fable r1 `docs\reviews\zod-vuln-plan-fable-review-r1.md`(번들 저장소)
 
