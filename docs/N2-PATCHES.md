@@ -298,7 +298,7 @@
 - **검증**: `tsc --noEmit`, vitest 174파일 1,449 통과, `verify:annex-runtime`(optional 없이), `npm audit --omit=dev` High 0
   (Moderate 1: `@hono/node-server` 2.1.1 — SDK HTTP 전송용, stdio 미사용, 상류 lockfile 유지), `npm ls zod` 4.6.7 단일.
   tools/list 게시본 대비 10개·입력 스키마 동일(설명·title·instructions만 상류 변경)
-- **검토**: 계획 Fable r1 `docseviews\zod-vuln-plan-fable-review-r1.md`(번들 저장소)
+- **검토**: 계획 Fable r1 `docs\reviews\zod-vuln-plan-fable-review-r1.md`(번들 저장소)
 
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)
