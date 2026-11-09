@@ -51,7 +51,7 @@ const prec2Xml =
 
 const precDetailJson = (id: string) => JSON.stringify({ PrecService: {
   사건명: "음주운전 면허취소 처분 취소", 사건번호: `사건-${id}`, 법원명: "대법원", 선고일자: "20240208",
-  판시사항: `판시사항 본문 ${id}`,
+  판시사항: `도로교통법 음주운전 판시사항 본문 ${id}`, // N2 패치 #2: 관련성 게이트가 검색어와 대조하므로 관련 판례답게
 } })
 
 const aiXml = (lawName: string) =>

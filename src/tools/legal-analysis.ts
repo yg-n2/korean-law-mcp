@@ -49,7 +49,7 @@ export const LegalAnalysisSchema = z.object({
   title: z.string().optional()
     .describe("[amendment_table] 대비표 제목 (예: '건축법 일부개정법률안'). 생략 시 법령명으로 만든다"),
   outputPath: z.string().optional()
-    .describe("[amendment_table] 한글(.hwpx) 저장 경로 — 로컬 실행(STDIO·CLI)에서만"),
+    .describe("[amendment_table] 한글(.hwpx) 저장 경로 — 이 배포판은 파일 저장을 지원하지 않아 쓰이지 않음"),
   apiKey: z.string().optional(),
 })
 

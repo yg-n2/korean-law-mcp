@@ -32,7 +32,7 @@ export const AmendmentTableSchema = z.object({
     text: z.string().min(1).describe("개정안 조문 전문 — 개정 후 모습 그대로(조 머리·항·호·목, 한 줄에 한 단위). 바뀌지 않는 항·호는 그대로 적거나 '② ∼ ⑤ (현행과 같음)'·'1.·2. (현행과 같음)'으로 줄여 쓴다(적지 않은 현행 항·호는 삭제로 본다). 지우는 항·호는 '③ 삭제', 조 전체 삭제는 '제5조 삭제'"),
     currentText: z.string().optional().describe("현행 조문 원문 직접 입력 — 조례·행정규칙 등 자동 조회가 안 될 때. 신설 조는 빈 문자열"),
   })).min(1).max(MAX_AMENDED_ARTICLES).describe("개정하는 조문 목록 (조문 순서대로 정렬해 표를 만든다)"),
-  outputPath: z.string().optional().describe("한글(.hwpx) 파일 저장 경로 — 로컬 실행(STDIO·CLI)에서만"),
+  outputPath: z.string().optional().describe("한글(.hwpx) 저장 경로 — 이 배포판은 파일 저장을 지원하지 않아 쓰이지 않음"),
   apiKey: z.string().optional().describe("법제처 Open API 인증키(OC). 사용자가 제공한 경우 전달"),
 }).refine(d => d.lawName || d.mst || d.lawId || d.amendments.every(a => a.currentText !== undefined), {
   message: "lawName·mst·lawId 중 하나를 주거나, 모든 조문에 currentText(현행 원문)를 넣으세요",
@@ -129,7 +129,7 @@ export async function amendmentTable(apiClient: LawApiClient, input: AmendmentTa
 
     if (input.outputPath && articles.length) {
       if (!fileOutputEnabled) {
-        lines.push("", "HWPX 파일 저장은 로컬 실행(STDIO·CLI)에서만 됩니다. 위 표를 한글에 붙여 넣어 쓰세요.")
+        lines.push("", "이 배포판은 대비표 파일 저장을 지원하지 않습니다. 위 표를 한글에 붙여 넣어 쓰세요.")
       } else {
         const saved = await saveHwpx(input.outputPath, title, articles)
         lines.push("", `HWPX 저장: ${saved} (한양신명조 14pt · 줄 간격 180% · 법제업무편람 서식)`)

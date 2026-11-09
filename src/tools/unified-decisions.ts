@@ -42,6 +42,7 @@ import { searchTreaties, getTreatyText } from "./treaties.js"
 import { searchEnglishLaw, getEnglishLawText } from "./english-law.js"
 import { searchPrecedentsStructured } from "./precedent-search-core.js"
 import { fetchPrecedentEvidence, validatePrecedentSearchResult } from "./precedent-evidence.js"
+import { withCompactFallback, withSearchScopeRetry } from "./decision-search-fallback.js"
 
 // ========================================
 // Domain enum & config
@@ -86,13 +87,14 @@ const DOMAIN_LABELS: Record<Domain, string> = {
 // Search handler dispatch table
 const SEARCH_HANDLERS: Record<Domain, (api: LawApiClient, args: any) => Promise<LooseToolResponse>> = {
   precedent: searchPrecedents,
-  interpretation: searchInterpretations,
-  tax_tribunal: searchTaxTribunalDecisions,
-  customs: searchCustomsInterpretations,
-  nts: searchNtsInterpretations,
+  // N2 패치 #5: 예규·해석례·조세심판은 0건 시 축약 재검색 사다리 적용 (판례는 precedent-search-core가 자체 폴백 보유)
+  interpretation: withCompactFallback(searchInterpretations),
+  tax_tribunal: withCompactFallback(searchTaxTribunalDecisions),
+  customs: withCompactFallback(searchCustomsInterpretations), // nts와 같은 구현 — 동작 일관성
+  nts: withCompactFallback(searchNtsInterpretations, { scopeRetry: true }), // N2 패치 #10
   moel: searchMoelInterpretations,
   mois: searchMoisInterpretations,
-  ministry: searchMinistryInterpretations,
+  ministry: withSearchScopeRetry(searchMinistryInterpretations), // N2 패치 #10: 검색어 축약 사다리는 적용하지 않는다
   constitutional: searchConstitutionalDecisions,
   admin_appeal: searchAdminAppeals,
   ftc: searchFtcDecisions,
@@ -161,7 +163,7 @@ export const SearchDecisionsSchema = z.object({
   page: z.number().min(1).default(1).optional().describe("페이지 (기본1)"),
   sort: z.string().optional().describe("정렬: lasc/ldes/dasc/ddes/nasc/ndes"),
   options: z.record(z.string(), z.unknown()).optional().describe(
-    "도메인별 옵션. prec:{court,caseNumber,fromDate,toDate,search(1=판례명 기본·2=본문·\"both\"=판례명+본문)} tax_tribunal:{cls,gana,dpaYd,rslYd} customs:{inq,rpl,gana,explYd} moel·mois:{search(1=안건명 기본·2=본문),explYd} ministry:{ministry(필수: 부처 코드 molit·moef·mohw… 또는 부처명 '국토교통부'),search,explYd} constitutional:{caseNumber} interpretation:{fromDate,toDate} treaty:{cls,natCd,eftYd,concYd}"
+    "도메인별 옵션. prec:{court,caseNumber,fromDate,toDate,search(1=판례명 기본·2=본문·\"both\"=판례명+본문)} tax_tribunal:{cls,gana,dpaYd,rslYd} customs:{inq,rpl,gana,explYd} nts:{search(1=안건명 기본·2=요지·회신),explYd} moel·mois:{search(1=안건명 기본·2=본문),explYd} ministry:{ministry(필수: 부처 코드 molit·moef·mohw… 또는 부처명 '국토교통부'),search,explYd} constitutional:{caseNumber} interpretation:{fromDate,toDate} treaty:{cls,natCd,eftYd,concYd}"
   ),
   apiKey: z.string().optional(),
 })
@@ -195,6 +197,7 @@ async function searchPrecedentDecisionsWithText(
     apiKey,
     detailLimit,
     full: false,
+    relevanceGate: true, // N2 패치 #2: 무관 판례 전문 자동첨부 차단
   })
   const text = evidence ? `${listText}\n\n▶ 관련 판례 상세\n${evidence.text}` : listText
 

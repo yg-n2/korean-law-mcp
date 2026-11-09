@@ -152,7 +152,7 @@ describe("amendment_table", () => {
     const input = AmendmentTableSchema.parse({ mst: "273437", lawName: "건축법", amendments: [{ text: NEW_22 }], outputPath })
 
     const remote = await amendmentTable(stub(), input)
-    expect(remote.content[0].text).toContain("HWPX 파일 저장은 로컬 실행(STDIO·CLI)에서만 됩니다")
+    expect(remote.content[0].text).toContain("이 배포판은 대비표 파일 저장을 지원하지 않습니다")
     await expect(readFile(outputPath)).rejects.toThrow()
 
     enableAmendmentFileOutput()
@@ -172,11 +172,17 @@ describe("amendment_table", () => {
 
     // "~/…" 경로는 홈 디렉터리로 푼다(Claude 가 "바탕화면에 저장해 줘"를 ~/Desktop/… 로 넘긴다)
     const home = process.env.HOME
+    const userProfile = process.env.USERPROFILE // Windows 의 homedir() 은 USERPROFILE 을 본다
     process.env.HOME = dir
+    process.env.USERPROFILE = dir
     try {
       const tilde = await amendmentTable(stub(), { ...input, outputPath: "~/sub/대비표2.hwpx" })
       expect(tilde.content[0].text).toContain(`HWPX 저장: ${path.join(dir, "sub", "대비표2.hwpx")}`)
-    } finally { process.env.HOME = home }
+    } finally {
+      process.env.HOME = home
+      if (userProfile === undefined) delete process.env.USERPROFILE
+      else process.env.USERPROFILE = userProfile
+    }
 
     const bad = await amendmentTable(stub(), { ...input, outputPath: path.join(dir, "대비표.docx") })
     expect(bad.isError).toBe(true)

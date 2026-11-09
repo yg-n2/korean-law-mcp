@@ -15,7 +15,6 @@ import { parseHttpPort } from "./server/http-config.js"
 import { readExecutionLimits, type ExecutionLimits } from "./lib/execution-limits.js"
 import { VERSION } from "./version.js"
 import { SERVER_INSTRUCTIONS } from "./lib/tool-profiles.js"
-import { enableAmendmentFileOutput } from "./tools/amendment-table.js"
 
 // API 클라이언트 초기화 (LAW_OC 또는 KOREAN_LAW_API_KEY 지원)
 const LAW_OC = process.env.LAW_OC || process.env.KOREAN_LAW_API_KEY || ""
@@ -60,8 +59,8 @@ async function main() {
     const stderrWrite = (...args: unknown[]) =>
       process.stderr.write(args.map(String).join(" ") + "\n")
     console.log = console.warn = console.info = console.debug = stderrWrite
-    // 로컬 실행만 대비표 HWPX 를 디스크에 쓴다(HTTP 원격은 끈 채로)
-    enableAmendmentFileOutput()
+    // N2 패치 #11: 팀 배포판은 대비표 HWPX 파일 저장을 켜지 않는다. outputPath 에 경로 제한이 없어
+    // 사용자 확인 없이 임의 위치의 .hwpx 를 덮어쓸 수 있다(보안 제약: 범용 파일 도구 금지). 표는 채팅으로 나간다.
     const server = createServer()
     const transport = new StdioServerTransport()
     await server.connect(transport)
