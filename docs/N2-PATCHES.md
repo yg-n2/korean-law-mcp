@@ -25,7 +25,7 @@ squash 재적용 이후 n2 의 기준점은 각 동기화 절에 적은 상류 �
 | 4 | verify_citations 행정규칙 인용 검증 | `tools/admin-rule-citation.ts`(신규), ★`verify-citations.ts` | `admin-rule-citation.test.ts`, ★`verify-citations.test.ts` 추가분 | 미반영 (PR 후보) |
 | 5 | 0건 시 검색어 축약 사다리 (interpretation·tax_tribunal·customs·nts) | `tools/decision-search-fallback.ts`(신규), ★`unified-decisions.ts` 디스패치 | `decision-search-fallback.test.ts` | 미반영 |
 | 6 N1·N2 | 별표 오선택·부존재 단정 방지 | ★`annex-select.ts`, ★`annex.ts` | `annex-n2-patch.test.ts` | 미반영 (상류 4.15 판정과 AND) |
-| 7 | 별표 정본(현행 본문) 응답 구조 검증 | `lib/annex-canonical-n2.ts`(신규), ★`annex-canonical.ts`(import·매핑 분리·호출 1줄) | `annex-canonical-n2.test.ts` | 미반영 |
+| 7 | 별표 정본(현행 본문) 응답 구조 검증 + 걸러진 항목 추적(무번호 별표 정본 링크·색인 링크 경고·확인 불가) | `lib/annex-canonical-n2.ts`(신규), ★`annex-canonical.ts`(import·매핑 분리·호출 2줄), ★`annex.ts`(N2 블록·목록 병합 1줄), ★`annex-history.ts`(0건 판정) | `annex-canonical-n2.test.ts`, `annex-n2-canonical.test.ts` | 미반영 |
 | 8·9 R7 | 재조회 안내 lawId 우선·MST 현행 보장 아님 | ★`law-text.ts` | `law-text.n2-retry-hint.test.ts` | 미반영 (상류 main 여전히 mst 우선, PR 후보) |
 | 10 | 0건 시 축약 전에 검색 범위 전환 (nts·ministry) | `tools/decision-search-fallback.ts`, ★`unified-decisions.ts` 디스패치·options 설명 | `decision-search-fallback.test.ts` | 미반영 (options 설명은 PR 후보) |
 | 11 | 대비표 HWPX 파일 저장 비활성 | ★`index.ts`, ★`amendment-table.ts`, ★`tool-registry.ts`, ★`legal-analysis.ts` | `n2-file-output-off.test.ts`, ★`amendment-table.test.ts` | 불가 (상류 의도 기능) |
@@ -359,6 +359,22 @@ squash 재적용 이후 n2 의 기준점은 각 동기화 절에 적은 상류 �
 - **패치 10 설계 확인(코드 무변경)**: nts 는 범위 전환 뒤 검색어 축약 사다리를 **원래 범위로만** 돈다. 1~2어절로 줄인 검색어로
   요지·회신(본문)까지 찾으면 무관 해석이 대량으로 섞여 선별 부담이 커지기 때문 — 의도된 동작. 0건일 때 최대 호출은 4회(원 검색·범위 전환·축약 2단계)
 - **검증**: 동봉 Node 22.22.2로 vitest 전체, `tsc --noEmit`, `npm run build`
+
+### 2026-11-12 적대적 검토 r1 반영 (번들 `_작업\review-20261112\adv-law-r1.md` B1·B2)
+- **원인**: 위 패치 7 수정 뒤 `fetchLawAnnexUnits`가 걸러진 뒤 남은 항목만 돌려줘, 호출부가 걸러진 항목이 있었다는 사실을
+  모른 채 "정본 대조 완료"(색인 링크를 경고 없이 사용)·"별표 없음"(NOT_FOUND)으로 처리했다
+- **실응답 확인(법제처 4회, 2026-11-12)**: 여권법 시행령 — 색인 1건 `000000` flSeq=161427905, 현행 본문 별표단위 1건 `0000`
+  flSeq=161544623(색인 링크가 정본과 다름). 소득세법 시행령 — 색인 11건·별표단위 11건, 번호 일치·전부 링크 있음
+  (색인 flSeq 1697981xx ≠ 정본 1698134xx~). 별표단위 키 구성은 두 법령 모두 같은 12개(링크 키 항상 있음). 진단 스크립트·출력은 번들 `_작업\law-qa\`
+- **수정**: `annex-canonical-n2.ts`가 걸러진 항목(번호·사유 zero_code/no_link/no_link_key)을 반환 배열에 붙인다(WeakMap — 상류 반환 타입 그대로,
+  캐시된 배열에도 유지). 링크 키 없는 항목이 있으면 캐시하지 않는다. 호출부(`annex.ts` N2 블록 → `reviewCanonicalPick`):
+  고른 색인 항목이 무번호이고 정본 무번호 단위가 1건이면 그 정본 링크를 쓰고, 고른 별표가 정본에 없거나 링크가 없으면 색인 링크 사용 경고,
+  색인에 없는 번호가 정본에 링크 없이 있으면 `[확인 불가]`. 목록은 `listMergeIssue`로 병합 경고. 기준일 조회(`annex-history.ts`)는
+  단일 무번호 별표를 되살리고 걸러진 항목만 있으면 확인 불가. 별표 요소가 `""`·`[]`·`{}`면 별표 없음
+- **게이트 보완**: 한도·기한·시가 등으로 끝나는 토큰은 깎지 않음, 어미 목록에서 도·만 제외, 토큰이 전부 일반어면 일반어를 되살림,
+  관한·대하여 등을 일반어에 추가
+- **하지 않은 것**: `법령` 객체에 `기본정보`를 필수로 요구하는 강화 — 상류 시험 픽스처 다수가 `기본정보` 없이 써서 상류 시험을 고쳐야 하므로 보류
+- **시험**: `annex-n2-canonical.test.ts` 13건(getAnnexes 수준, 내려받은 링크와 문구 — 수정 전 코드에서 10건 실패 확인), 단위 4건, 게이트 4건
 
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)
