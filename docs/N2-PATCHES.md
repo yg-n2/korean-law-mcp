@@ -1,21 +1,38 @@
 # N2 자체 패치 목록
 
 > 이 파일은 **n2 브랜치 전용**이다. upstream(chrisryugj/korean-law-mcp)에 없는
-> 우리 자체 수정을 전부 여기에 기록한다. 항목이 늘 때마다 반드시 갱신할 것.
+> 우리 자체 수정을 전부 여기에 기록한다. 패치를 더하거나 고치거나 은퇴시킬 때마다
+> 아래 "현재 활성 패치" 표와 해당 절을 함께 갱신할 것.
 
 ## 브랜치 규칙
 
 | 브랜치 | 역할 | 규칙 |
 |---|---|---|
 | `main` | upstream 미러 전용 | 직접 커밋 절대 금지. 항상 `git merge --ff-only upstream/main`만 |
-| `n2` | 자체 수정 전용 | upstream 갱신 시 `git rebase main`. 수정은 **신규 파일 위주** (충돌 최소화) |
+| `n2` | 자체 수정 전용 | 상류 위 N2 패치 squash 1커밋 + 후속 커밋. 수정은 **신규 파일 위주** (충돌 최소화) |
+| `n2-backup-*` | 재적용 전 n2 보존 | 지우지 않는다 (squash 재적용 탓에 옛 이력은 n2 에서 도달 불가) |
 
-업데이트 절차는 `C:\dev\n2-mcp-bundle\scripts\sync-upstream.bat` 더블클릭
-(내부: fetch → main ff-merge → n2 rebase → npm install → build).
+상류 동기화 방식(2026-10-20부터): 변경이 작으면 번들 `scripts\sync-upstream.bat`(fetch → main ff → n2 rebase →
+install·build·vitest·스모크). 변경이 크거나 N2 파일과 많이 겹치면 `n2-backup-<날짜>` 생성 → 임시 `n2-sync-<날짜>`에서
+`git merge --squash`로 N2 전체를 상류 위에 한 번에 재적용 → 검증 → n2 갱신. 최초 분기는 `ad2d620`(upstream v4.9.7)이지만
+squash 재적용 이후 n2 의 기준점은 각 동기화 절에 적은 상류 커밋이다(현재 4.15.23 = `3f7c7d8`).
 
-## 패치 목록
+## 현재 활성 패치 (2026-11-12 기준)
 
-브랜치 분기 시점: `ad2d620` (upstream v4.9.7)
+| 패치 | 내용 | 건드린 파일 (★ = 상류 파일) | 시험 | 상류 반영 |
+|---|---|---|---|---|
+| 2 | 무관 판례 전문 자동첨부 게이트 | `tools/precedent-relevance-gate.ts`(신규), ★`precedent-evidence.ts`, ★`chains.ts` 2곳, ★`unified-decisions.ts` 1곳 | `precedent-relevance-gate.test.ts`, `precedent-evidence.n2-gate.test.ts`, ★`chains.deadline.test.ts` 픽스처 | 미반영 (PR 후보) |
+| 4 | verify_citations 행정규칙 인용 검증 | `tools/admin-rule-citation.ts`(신규), ★`verify-citations.ts` | `admin-rule-citation.test.ts`, ★`verify-citations.test.ts` 추가분 | 미반영 (PR 후보) |
+| 5 | 0건 시 검색어 축약 사다리 (interpretation·tax_tribunal·customs·nts) | `tools/decision-search-fallback.ts`(신규), ★`unified-decisions.ts` 디스패치 | `decision-search-fallback.test.ts` | 미반영 |
+| 6 N1·N2 | 별표 오선택·부존재 단정 방지 | ★`annex-select.ts`, ★`annex.ts` | `annex-n2-patch.test.ts` | 미반영 (상류 4.15 판정과 AND) |
+| 7 | 별표 정본(현행 본문) 응답 구조 검증 | `lib/annex-canonical-n2.ts`(신규), ★`annex-canonical.ts`(import·매핑 분리·호출 1줄) | `annex-canonical-n2.test.ts` | 미반영 |
+| 8·9 R7 | 재조회 안내 lawId 우선·MST 현행 보장 아님 | ★`law-text.ts` | `law-text.n2-retry-hint.test.ts` | 미반영 (상류 main 여전히 mst 우선, PR 후보) |
+| 10 | 0건 시 축약 전에 검색 범위 전환 (nts·ministry) | `tools/decision-search-fallback.ts`, ★`unified-decisions.ts` 디스패치·options 설명 | `decision-search-fallback.test.ts` | 미반영 (options 설명은 PR 후보) |
+| 11 | 대비표 HWPX 파일 저장 비활성 | ★`index.ts`, ★`amendment-table.ts`, ★`tool-registry.ts`, ★`legal-analysis.ts` | `n2-file-output-off.test.ts`, ★`amendment-table.test.ts` | 불가 (상류 의도 기능) |
+| 시험 | 상류 시험 Windows 수정 (`HOME`과 함께 `USERPROFILE`) | ★`amendment-table.test.ts` | — | 미반영 (PR 후보) |
+
+**은퇴(상류가 대체)**: 1 nts 본문(4.15.10) · 3 안건번호 표기(4.15.4, 시험도 2026-11-12 삭제) · 6 L2 본문 한도(4.15.0, "상류 회귀 고정" 시험 1건만 유지) ·
+7 본문 읽기 30초 제한(4.15 데드라인) · 9 B3·R5(4.15, R5 시험도 2026-11-12 삭제).
 
 ### 1. 국세청 예규·법령해석 본문 조회 (2026-08-13) — **2026-10-29 은퇴(상류 4.15.10이 대체)**
 - **무엇을**: `get_decision_text(domain="nts")`가 `[NOT_SUPPORTED]` 대신
@@ -325,6 +342,23 @@
 - **건드린 파일**: `src/index.ts`, `src/tools/amendment-table.ts`(`.test.ts`), `src/tools/legal-analysis.ts`, `src/tool-registry.ts`
 - **upstream PR 가능 여부**: 불가(상류는 의도한 기능)
 - **검증 방법**: `build/index.js`에 호출 없음 확인, 단위 시험 통과
+
+### 2026-11-12 검수 후속 (번들 `_작업\review-20261112\law.md`)
+- **패치 7 결함 수정**: 구조 검증이 걸러내기 **전** 별표단위 개수와 파싱 결과(링크 없는 항목·`000000` 제외)를 비교해,
+  그런 항목이 하나라도 있는 법령은 정본 대조가 늘 실패했다(여권법 시행령 실호출 4.15.9·4.15.14 모두 "정본 링크 확인 불가" —
+  원인은 합성 입력으로 재현, 실응답 대조는 미실행). 이제 구조 결함(JSON 오류·`법령` 객체 없음·별표/별표단위 비객체·항목은 있는데
+  링크 필드 자체가 전부 없음)만 조회 실패로 던지고, 개별 항목은 상류 파서 기준으로 걸러진다. 검증은 신규 `lib/annex-canonical-n2.ts`,
+  상류 `annex-canonical.ts`는 `parseLawAnnexUnits`의 매핑을 `lawAnnexUnitsFromJson`으로 분리해 JSON을 한 번만 파싱
+- **패치 2 결함 수정**: 3어절 이하 원 질의는 토큰을 그대로 AND 조건으로 써 "퇴직금을 중간정산하는 경우"가 관련 판례도 막았다.
+  `stemGateToken`이 끝 조사·어미를 떼고(남는 말 2자 이상), 일반어(경우·관련·문제·사례·판례·대법원)는 필수어에서 뺀다.
+  떼어 낸 형태는 원 토큰의 앞부분이라 대조가 엄격해지지 않는다. 무관 판례 차단 회귀 시험 3건 포함
+- **시험 보강**: 패치 7 단위 시험, 패치 2 연결부(`fetchPrecedentEvidence`) 시험, 패치 11 감시 시험
+  (`enableAmendmentFileOutput`을 정의·`cli.ts` 밖에서 쓰면 실패 — 상류가 호출 위치를 옮겨 squash 재적용이 조용히 저장을 다시 켜는 경우 대비)
+- **은퇴 시험 정리**: 패치 3 `customs-interpretations.test.ts` 삭제(상류 `nts-interpretation.test.ts`가 대체), 패치 9 R5 시험 삭제
+  (상류 시험 파일을 상류 그대로로), 패치 6 L2 블록은 "상류 회귀 고정" 1건으로 축소
+- **패치 10 설계 확인(코드 무변경)**: nts 는 범위 전환 뒤 검색어 축약 사다리를 **원래 범위로만** 돈다. 1~2어절로 줄인 검색어로
+  요지·회신(본문)까지 찾으면 무관 해석이 대량으로 섞여 선별 부담이 커지기 때문 — 의도된 동작. 0건일 때 최대 호출은 4회(원 검색·범위 전환·축약 2단계)
+- **검증**: 동봉 Node 22.22.2로 vitest 전체, `tsc --noEmit`, `npm run build`
 
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)
