@@ -21,7 +21,7 @@ import { collectAnnexList, collectAdminAnnexList, ANNEX_PAGE_SIZE, MAX_ANNEX_PAG
 import {
   buildSelectorCandidates, extractBundledSection, extractParentLawName, extractSelectorNumbers,
   filterByAnnexQuery, filterByArticle, filterByRelatedLawName, findMatchingAnnex, isBranchNumber,
-  isBundledAnnex, listBundledSections,
+  hasIdentifiableAnnexNumber, isBundledAnnex, listBundledSections,
   type AnnexItem,
 } from "./annex-select.js"
 
@@ -274,7 +274,11 @@ async function extractAnnexContent(
           selectorCandidates,
           knd,
         })
-        const review = reviewCanonicalPick(units, picked, matched ? String(matched.별표번호 ?? "") : undefined, selectorCandidates)
+        const review = reviewCanonicalPick(units, picked, matched ? {
+          code: String(matched.별표번호 ?? ""),
+          kind: matched.별표종류 ? String(matched.별표종류) : undefined,
+          numbered: hasIdentifiableAnnexNumber(matched),
+        } : undefined, selectorCandidates)
         const unit = review.unit
         if (review.note) canonicalNoteN2 = review.note
         if (review.unverified) {

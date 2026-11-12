@@ -11,7 +11,7 @@ import { getAnnexes } from "./annex.js"
 import { lawCache } from "../lib/cache.js"
 import type { LawApiClient } from "../lib/api-client.js"
 
-type Item = { code: string, title: string, flSeq: string }
+type Item = { code: string, title: string, flSeq: string, kind?: string }
 const LAW = "가나시험법 시행령"
 const MST = "900001"
 
@@ -19,7 +19,7 @@ const licbyl = (items: Item[]) => JSON.stringify({
   licBylSearch: {
     resultMsg: "success",
     licbyl: items.map(it => ({
-      별표번호: it.code, 별표명: it.title, 별표종류: "별표",
+      별표번호: it.code, 별표명: it.title, 별표종류: it.kind ?? "별표",
       별표서식파일링크: `/LSW/flDownload.do?flSeq=${it.flSeq}`, 관련법령명: LAW, 관련법령일련번호: MST,
     })),
   },
@@ -164,5 +164,57 @@ describe("B2: 기준일(date) 조회", () => {
   it("별표 요소 자체가 비어 있으면(\"\") 종전대로 별표 없음", async () => {
     const r = await getAnnexes(dated(JSON.stringify({ 법령: { 기본정보: {}, 별표: "" } })), { lawName: LAW, date: "2024-01-01" } as never)
     expect(r.content[0].text).toContain("별표·서식이 없습니다")
+  })
+})
+
+describe("무번호 짝짓기 조건 (적대적 검토 r2 C1)", () => {
+  it("무번호 별표와 무번호 서식이 함께 있으면 서식 요청에 별표 파일을 주지 않는다 (P2)", async () => {
+    const c = client(
+      [{ code: "000000", title: "수수료", flSeq: "OLDA" }, { code: "000000", title: "신청서", flSeq: "OLDF", kind: "서식" }],
+      lawBody([unit("0000", "수수료", "CANB"), { ...unit("0000", "신청서", null), 별표구분: "서식" }]),
+    )
+    const r = await getAnnexes(c, { lawName: LAW, bylSeq: "000000", knd: "2" } as never)
+    expect(downloaded("CANB")).toBe(false)
+    expect(downloaded("OLDF")).toBe(true)
+    expect(r.content[0].text).toContain("정본 링크를 확인하지 못했습니다")
+  })
+
+  it("무번호 단위가 링크 없는 것까지 2건이면 별표 요청도 짝짓지 않고 색인 링크 + 경고", async () => {
+    const c = client(
+      [{ code: "000000", title: "수수료", flSeq: "OLDA" }],
+      lawBody([unit("0000", "수수료", "CANB"), { ...unit("0000", "신청서", null), 별표구분: "서식" }]),
+    )
+    const r = await getAnnexes(c, { lawName: LAW, annexNo: "1" } as never)
+    expect(downloaded("CANB")).toBe(false)
+    expect(downloaded("OLDA")).toBe(true)
+    expect(r.content[0].text).toContain("⚠️")
+  })
+
+  it("색인 코드는 비었고 제목에만 번호가 있으면 정본 무번호 단위와 짝짓지 않는다 (P1)", async () => {
+    const c = client(
+      [{ code: "", title: "[별표 1] 가", flSeq: "OLD1" }, { code: "", title: "[별표 3] 다", flSeq: "OLD3" }],
+      lawBody([unit("0001", "가", "NEW1"), unit("0003", "다", "NEW3"), unit("0000", "무번호", "ZERO")]),
+    )
+    const r = await getAnnexes(c, { lawName: LAW, annexNo: "3" } as never)
+    expect(downloaded("ZERO")).toBe(false)
+    expect(urls).toHaveLength(1)
+    expect(r.content[0].text).not.toContain("무번호")
+  })
+
+  it("종류가 다르면 짝짓지 않는다 (색인 서식 ↔ 정본 무번호 별표)", async () => {
+    const c = client([{ code: "000000", title: "신청서", flSeq: "OLDF", kind: "서식" }], lawBody([unit("0000", "수수료", "CANB")]))
+    const r = await getAnnexes(c, { lawName: LAW, annexNo: "1" } as never)
+    expect(downloaded("CANB")).toBe(false)
+    expect(downloaded("OLDF")).toBe(true)
+    expect(r.content[0].text).toContain("⚠️")
+  })
+
+  it("여권법 시행령형(색인·정본 모두 단일 무번호 별표, 제목에 번호 없음)은 여전히 정본 링크", async () => {
+    const c = client([{ code: "000000", title: "수수료 및 사무의 대행에 드는 비용(제39조 관련)", flSeq: "161427905" }],
+      lawBody([unit("0000", "수수료 및 사무의 대행에 드는 비용(제39조 관련)", "161544623")]))
+    const r = await getAnnexes(c, { lawName: LAW, bylSeq: "000000" } as never)
+    expect(downloaded("161544623")).toBe(true)
+    expect(downloaded("161427905")).toBe(false)
+    expect(r.content[0].text).not.toContain("⚠️")
   })
 })

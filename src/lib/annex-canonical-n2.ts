@@ -108,10 +108,16 @@ export function skippedAnnexUnits(units: LawAnnexUnit[]): SkippedAnnexUnit[] {
   return SKIPPED.get(units) ?? []
 }
 
-/** 정본에 무번호(000000) 별표가 정확히 1건이고 링크가 있으면 그 단위 */
-export function soleZeroCodeUnit(units: LawAnnexUnit[]): LawAnnexUnit | undefined {
-  const zero = skippedAnnexUnits(units).filter(s => s.reason === "zero_code" && s.unit)
-  return zero.length === 1 ? zero[0].unit : undefined
+/**
+ * 정본의 무번호(000000) 단위가 링크 유무·종류와 관계없이 정확히 1건이고 그 단위에 링크가 있으면 그 단위.
+ * 링크 있는 것만 세면 "무번호 별표(링크 있음) + 무번호 서식(링크 빈 값)"에서 별표를 유일로 잘못 판정한다(적대적 검토 r2 C1).
+ * kind 를 주면 종류도 같아야 한다.
+ */
+export function soleZeroCodeUnit(units: LawAnnexUnit[], kind?: string): LawAnnexUnit | undefined {
+  const zero = skippedAnnexUnits(units).filter(s => s.code6 === "000000")
+  if (zero.length !== 1 || !zero[0].unit) return undefined
+  if (kind !== undefined && zero[0].kind.trim() !== kind.trim()) return undefined
+  return zero[0].unit
 }
 
 /** 목록·기준일 조회용: 걸러진 단일 무번호 별표를 정본 단위로 되살린 배열(걸러진 정보도 이어 붙인다) */
@@ -141,18 +147,29 @@ export interface CanonicalPickReview {
  * - 고른 색인 항목이 정본 단위에 없으면 경고(삭제·구본 가능)
  * - 색인에 없는 번호를 요청했는데 정본에 그 번호가 링크 없이 있으면 확인 불가
  */
+export interface MatchedIndexItem {
+  /** 색인 별표번호(6자리 코드 또는 빈 값) */
+  code: string
+  /** 색인 별표종류(별표·서식 등) */
+  kind?: string
+  /** 색인 항목이 스스로 번호를 갖는가(annex-select hasIdentifiableAnnexNumber — 코드 본번≥1 또는 제목 앞 번호 표기) */
+  numbered: boolean
+}
+
 export function reviewCanonicalPick(
   units: LawAnnexUnit[],
   picked: LawAnnexUnit | undefined,
-  matchedCode: string | undefined,
+  matched: MatchedIndexItem | undefined,
   selectorCandidates: Set<string> | undefined,
 ): CanonicalPickReview {
   if (picked) return { unit: picked }
   const skipped = skippedAnnexUnits(units)
-  if (matchedCode !== undefined) {
-    const code = matchedCode.trim()
-    if (code === "" || /^0{6}$/.test(code)) {
-      const zero = soleZeroCodeUnit(units)
+  if (matched !== undefined) {
+    const code = matched.code.trim()
+    // 무번호 짝짓기(적대적 검토 r2 C1): 색인 코드가 무번호이고, 제목에도 번호가 없고, 종류가 같고,
+    // 정본 무번호 단위가 (링크 유무와 관계없이) 1건일 때만. 벗어나면 아래 색인 링크 + 경고
+    if ((code === "" || /^0{6}$/.test(code)) && !matched.numbered && matched.kind) {
+      const zero = soleZeroCodeUnit(units, matched.kind)
       if (zero) return { unit: zero }
     }
     const hit = skipped.find(s => s.code6 === code)
