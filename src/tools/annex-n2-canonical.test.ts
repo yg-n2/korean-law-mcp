@@ -209,6 +209,23 @@ describe("무번호 짝짓기 조건 (적대적 검토 r2 C1)", () => {
     expect(r.content[0].text).toContain("⚠️")
   })
 
+  it("색인 무번호 항목과 정본 무번호 단위의 제목이 다른 별표면 짝짓지 않는다 (검토자 재현 P3)", async () => {
+    const c = client(
+      [{ code: "000100", title: "[별표 1] 가", flSeq: "IDX1" }, { code: "000000", title: "구 별지 요율표", flSeq: "IDXOLD" }],
+      lawBody([unit("0001", "가", "CAN1"), unit("0000", "신 별지 수수료", "ZERO")]),
+    )
+    const r = await getAnnexes(c, { lawName: LAW, bylSeq: "000000" } as never)
+    expect(downloaded("ZERO")).toBe(false)
+    expect(downloaded("IDXOLD")).toBe(true)
+    expect(r.content[0].text).toContain("⚠️")
+  })
+
+  it("개정으로 제목에 '(제N조 관련)'이 붙은 정도는 같은 별표로 짝짓는다", async () => {
+    const c = client([{ code: "000000", title: "수수료", flSeq: "OLDA" }], lawBody([unit("0000", "수수료(제39조 관련)", "CANA")]))
+    await getAnnexes(c, { lawName: LAW, bylSeq: "000000" } as never)
+    expect(downloaded("CANA")).toBe(true)
+  })
+
   it("여권법 시행령형(색인·정본 모두 단일 무번호 별표, 제목에 번호 없음)은 여전히 정본 링크", async () => {
     const c = client([{ code: "000000", title: "수수료 및 사무의 대행에 드는 비용(제39조 관련)", flSeq: "161427905" }],
       lawBody([unit("0000", "수수료 및 사무의 대행에 드는 비용(제39조 관련)", "161544623")]))

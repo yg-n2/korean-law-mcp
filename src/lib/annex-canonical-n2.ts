@@ -154,6 +154,18 @@ export interface MatchedIndexItem {
   kind?: string
   /** 색인 항목이 스스로 번호를 갖는가(annex-select hasIdentifiableAnnexNumber — 코드 본번≥1 또는 제목 앞 번호 표기) */
   numbered: boolean
+  /** 색인 별표명 — 정본 무번호 단위 제목과 같은 별표인지 본다 */
+  title?: string
+}
+
+const normTitle = (t: string) => t.replace(/<[^>]+>/g, "").replace(/[^\p{L}\p{N}]+/gu, "")
+
+/** 같은 별표의 제목인가 — 같거나 한쪽이 다른 쪽을 품을 때(개정으로 "(제N조 관련)"이 붙는 정도는 허용) */
+function sameAnnexTitle(a: string | undefined, b: string): boolean {
+  const x = normTitle(a ?? "")
+  const y = normTitle(b)
+  if (!x || !y) return false
+  return x === y || x.includes(y) || y.includes(x)
 }
 
 export function reviewCanonicalPick(
@@ -167,10 +179,10 @@ export function reviewCanonicalPick(
   if (matched !== undefined) {
     const code = matched.code.trim()
     // 무번호 짝짓기(적대적 검토 r2 C1): 색인 코드가 무번호이고, 제목에도 번호가 없고, 종류가 같고,
-    // 정본 무번호 단위가 (링크 유무와 관계없이) 1건일 때만. 벗어나면 아래 색인 링크 + 경고
+    // 정본 무번호 단위가 (링크 유무와 관계없이) 1건이고, 제목이 같은 별표일 때만. 벗어나면 아래 색인 링크 + 경고
     if ((code === "" || /^0{6}$/.test(code)) && !matched.numbered && matched.kind) {
       const zero = soleZeroCodeUnit(units, matched.kind)
-      if (zero) return { unit: zero }
+      if (zero && sameAnnexTitle(matched.title, zero.title)) return { unit: zero }
     }
     const hit = skipped.find(s => s.code6 === code)
     return {
