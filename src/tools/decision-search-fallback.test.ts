@@ -149,3 +149,40 @@ describe("withCompactFallback", () => {
     expect(calls).toHaveLength(1)
   })
 })
+
+describe("범위 전환 + 축약 (2026-11-12 QA 실측)", () => {
+  it("요청 범위·반대 범위 모두 0건이면 축약 단계마다 요청 범위 → 반대 범위로 찾는다", async () => {
+    const calls: string[] = []
+    // 실측: '이익별로 구분'은 요지·회신(search=2)에서만 1건
+    const wrapped = withCompactFallback(async (_api, args) => {
+      calls.push(`${args.query}|${args.search ?? ""}`)
+      return args.query === "이익별로 구분" && args.search === "2" ? found(args.query) : notFound(args.query)
+    }, { scopeRetry: true })
+    const res = await wrapped(API, { query: "이익별로 구분 합산 1억원" })
+    expect(calls).toEqual([
+      "이익별로 구분 합산 1억원|", "이익별로 구분 합산 1억원|2",
+      "이익별로 구분|", "이익별로 구분|2",
+    ])
+    expect(res.isError).toBeFalsy()
+    expect(res.content[0].text).toContain("'이익별로 구분'(으)로 본문(요지·회신) 대상으로 재시도한 결과")
+  })
+
+  it("반대 범위 축약 검색의 오류도 0건으로 숨기지 않는다", async () => {
+    const wrapped = withCompactFallback(async (_api, args) => {
+      if (args.query === "가나 다라" && args.search === "2") return { content: [{ type: "text", text: "[ERROR] 429" }], isError: true }
+      return notFound(args.query)
+    }, { scopeRetry: true })
+    const res = await wrapped(API, { query: "가나 다라 마바" })
+    expect(res.content.map(c => c.text).join("\n")).toContain("오류로 중단됨: [ERROR] 429")
+  })
+
+  it("scopeRetry 가 없는 도메인은 종전대로 요청 범위로만 축약한다", async () => {
+    const calls: string[] = []
+    const wrapped = withCompactFallback(async (_api, args) => {
+      calls.push(`${args.query}|${args.search ?? ""}`)
+      return notFound(args.query)
+    })
+    await wrapped(API, { query: "가 나 다" })
+    expect(calls).toEqual(["가 나 다|", "가 나|", "가|"])
+  })
+})

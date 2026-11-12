@@ -77,7 +77,11 @@ export function withSearchScopeRetry(handler: SearchHandler): SearchHandler {
   }
 }
 
-/** 검색 핸들러를 축약 재검색 사다리로 감싼다 (search_decisions 디스패치 전용). */
+/**
+ * 검색 핸들러를 축약 재검색 사다리로 감싼다 (search_decisions 디스패치 전용).
+ * scopeRetry 면 축약 단계마다 요청 범위 → 반대 범위 순으로 찾는다(2026-11-12 QA: 기본 범위(안건명)로
+ * '이익별로 구분 합산 1억원'을 찾으면 원 범위 축약만으로는 0건이고, '이익별로 구분'을 요지·회신에서 찾아야 1건이 나왔다).
+ */
 export function withCompactFallback(handler: SearchHandler, options: { scopeRetry?: boolean } = {}): SearchHandler {
   const firstSearch = options.scopeRetry ? withSearchScopeRetry(handler) : handler
   return async (apiClient, args) => {
@@ -85,28 +89,34 @@ export function withCompactFallback(handler: SearchHandler, options: { scopeRetr
     const first = await firstSearch(apiClient, args)
     if (!query || !isNotFound(first)) return first
 
+    const altScope = String(args?.search) === "2" ? "1" : "2"
+    const scopes: Array<string | undefined> = options.scopeRetry ? [undefined, altScope] : [undefined]
     for (const retry of compactRetryQueries(query)) {
-      let res: LooseToolResponse
-      try {
-        res = await handler(apiClient, { ...args, query: retry })
-      } catch (e) {
-        // API 오류는 사다리를 중단하되, 중단 사유를 원 결과에 병기 — 오류 은폐 금지
-        return withLadderAbortNote(first, retry, e instanceof Error ? e.message : String(e))
-      }
-      // NOT_FOUND만 다음 단계로 재시도 (Codex 검토 차단 2): 429·타임아웃 등 다른 오류에
-      // 사다리를 계속 타면 rate limit을 더 소진한다 — throw 경로와 동일하게 사유 병기 후 중단
-      if (res.isError) {
-        if (isNotFound(res)) continue
-        return withLadderAbortNote(first, retry, res.content?.[0]?.text ?? "오류 응답")
-      }
+      for (const scope of scopes) {
+        const label = scope ? `${retry} — ${scope === "2" ? "본문(요지·회신)" : "안건명"} 검색` : retry
+        let res: LooseToolResponse
+        try {
+          res = await handler(apiClient, { ...args, query: retry, ...(scope ? { search: scope } : {}) })
+        } catch (e) {
+          // API 오류는 사다리를 중단하되, 중단 사유를 원 결과에 병기 — 오류 은폐 금지
+          return withLadderAbortNote(first, label, e instanceof Error ? e.message : String(e))
+        }
+        // NOT_FOUND만 다음 단계로 재시도 (Codex 검토 차단 2): 429·타임아웃 등 다른 오류에
+        // 사다리를 계속 타면 rate limit을 더 소진한다 — throw 경로와 동일하게 사유 병기 후 중단
+        if (res.isError) {
+          if (isNotFound(res)) continue
+          return withLadderAbortNote(first, label, res.content?.[0]?.text ?? "오류 응답")
+        }
 
-      const note =
-        `⚠ 검색어 축약 재검색: '${query}'는 0건이라 '${retry}'(으)로 재시도한 결과입니다.\n` +
-        `축약 검색은 범위가 넓어 원 질의와 무관한 결과가 섞일 수 있습니다 — 제목·일자로 선별하세요.\n\n`
-      const [head, ...rest] = res.content
-      return {
-        ...res,
-        content: [{ type: "text", text: note + (head?.text ?? "") }, ...rest],
+        const where = scope ? ` ${scope === "2" ? "본문(요지·회신)" : "안건명"} 대상으로` : ""
+        const note =
+          `⚠ 검색어 축약 재검색: '${query}'는 0건이라 '${retry}'(으)로${where} 재시도한 결과입니다.\n` +
+          `축약 검색은 범위가 넓어 원 질의와 무관한 결과가 섞일 수 있습니다 — 제목·일자로 선별하세요.\n\n`
+        const [head, ...rest] = res.content
+        return {
+          ...res,
+          content: [{ type: "text", text: note + (head?.text ?? "") }, ...rest],
+        }
       }
     }
     return first
