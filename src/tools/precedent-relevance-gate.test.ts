@@ -222,3 +222,33 @@ describe("짧은 질의의 조사·어미 (2026-11-12 검수 #2)", () => {
     expect(stemGateToken("부동산의")).toBe("부동산")
   })
 })
+
+describe("어간·일반어 보완 (적대적 검토 r1)", () => {
+  const gate = (query: string, body: string) =>
+    passesRelevanceGate(body, makeHit({ sourceQuery: query }), withOriginalQuery(query))
+
+  it("한도·기한·시가로 끝나는 세무 명사는 깎지 않는다", () => {
+    expect(stemGateToken("공제한도")).toBe("공제한도")
+    expect(stemGateToken("신고기한")).toBe("신고기한")
+    expect(stemGateToken("기준시가")).toBe("기준시가")
+    expect(stemGateToken("전문가")).toBe("전문가")
+    expect(stemGateToken("100만")).toBe("100만")
+    expect(stemGateToken("한도를")).toBe("한도")
+  })
+
+  it("공제한도 질의가 '공제한다' 본문을 통과하지 않는다", () => {
+    expect(gate("기부금 공제한도", "기부금을 손금에 산입하여 공제한다고 볼 수 없다")).toBe(false)
+    expect(gate("기부금 공제한도", "기부금 공제한도 초과액의 이월")).toBe(true)
+  })
+
+  it("토큰이 전부 일반어면 일반어를 되살려 게이트를 유지한다", () => {
+    expect(gateTermGroupsForHit(makeHit({ sourceQuery: "관련 판례" }), withOriginalQuery("관련 판례"))).not.toEqual([])
+    expect(gate("관련 판례", "산업재해 요양급여 처분 취소")).toBe(false)
+  })
+
+  it("관한·대하여 같은 말은 필수어에서 뺀다", () => {
+    const body = "퇴직금 중간정산의 효력에 관하여 근로자가 퇴직금을 중간정산 받은 경우"
+    expect(gate("퇴직금에 관한 판례", body)).toBe(true)
+    expect(gate("퇴직금 중간정산에 대하여", body)).toBe(true)
+  })
+})

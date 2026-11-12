@@ -60,13 +60,21 @@ const TOKEN_ENDINGS = [
   "으로써", "으로서", "에서는", "에게서", "이라는", "하였던", "했었던",
   "하는", "하던", "했던", "한다", "하여", "해서", "하면", "하고", "되는", "되어", "된다", "에서", "에게", "에는",
   "으로", "로서", "로써", "부터", "까지", "이나", "이란", "이라", "과의", "와의", "에의",
-  "을", "를", "은", "는", "이", "가", "의", "에", "와", "과", "도", "만", "로", "한",
+  "을", "를", "은", "는", "이", "가", "의", "에", "와", "과", "로", "한",
 ]
-// 판결문 어디에나 있어 변별력이 없는 말 — 필수어에서 뺀다(남은 토큰이 없으면 게이트 미적용)
-const GENERIC_TOKENS = new Set(["경우", "관련", "문제", "사례", "판례", "대법원"])
+// 한 글자 어미와 겹치는 세무 명사 끝 — 깎으면 "공제한도→공제한"(="공제한다"와 일치)처럼 무관 본문이
+// 통과한다(적대적 검토 r1). 이렇게 끝나는 토큰은 떼지 않는다. "도·만"은 어미 목록에서 뺐다(100만→100).
+const PROTECTED_TAILS = ["한도", "기한", "시가", "대가", "평가", "원가", "단가", "주가", "전문가", "양도", "부가", "증가", "추가"]
+// 판결문 어디에나 있어 변별력이 없는 말 — 필수어에서 뺀다. 다만 한 질의의 토큰이 전부 이런 말이면
+// 되살린다(전부 빠지면 게이트가 꺼져 무관 판례가 통과한다 — 적대적 검토 r1)
+const GENERIC_TOKENS = new Set([
+  "경우", "관련", "문제", "사례", "판례", "대법원",
+  "관한", "관하여", "대한", "대하여", "따른", "위한",
+])
 
 export function stemGateToken(token: string): string {
   const bare = token.replace(/[^\p{L}\p{N}]+/gu, "")
+  if (PROTECTED_TAILS.some(tail => bare.endsWith(tail))) return bare
   for (const ending of TOKEN_ENDINGS) {
     if (bare.endsWith(ending) && bare.length - ending.length >= 2) return bare.slice(0, -ending.length)
   }
@@ -75,12 +83,16 @@ export function stemGateToken(token: string): string {
 
 function collectTokens(source: string | undefined, into: Set<string>): void {
   if (typeof source !== "string") return
+  const kept: string[] = []
+  const generic: string[] = []
   for (const token of source.split(/\s+/)) {
     if (isStopToken(token)) continue
     const stem = stemGateToken(token)
-    if (GENERIC_TOKENS.has(stem)) continue
-    if (normalizeRelevanceText(stem).length >= 2) into.add(stem)
+    if (normalizeRelevanceText(stem).length < 2) continue
+    if (GENERIC_TOKENS.has(stem)) generic.push(stem)
+    else kept.push(stem)
   }
+  for (const stem of kept.length > 0 ? kept : generic) into.add(stem)
 }
 
 /**
