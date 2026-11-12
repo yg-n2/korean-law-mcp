@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { LawApiClient } from "./api-client.js"
 import { fetchLawAnnexUnits } from "./annex-canonical.js"
-import { parseCanonicalLawJson } from "./annex-canonical-n2.js"
+import { parseCanonicalLawJson, skippedAnnexUnits, soleZeroCodeUnit } from "./annex-canonical-n2.js"
 
 const unit = (no: string, extra: Record<string, unknown> = {}) => ({
   별표번호: no, 별표가지번호: "00", 별표구분: "별표", 별표제목: `별표 ${no}`,
@@ -63,5 +63,38 @@ describe("parseCanonicalLawJson", () => {
     expect(() => parseCanonicalLawJson(JSON.stringify({ 법령: { 별표: "없음" } }))).toThrow("별표 구조")
     expect(() => parseCanonicalLawJson(JSON.stringify({ 법령: { 별표: { 별표단위: ["x"] } } }))).toThrow("별표단위 구조")
     expect(() => parseCanonicalLawJson(JSON.stringify({ 법령: [] }))).toThrow("법령 구조")
+  })
+})
+
+describe("걸러진 항목 추적 (적대적 검토 r1 B1·B2)", () => {
+  it("걸러진 항목을 번호·사유와 함께 붙이고, 캐시된 배열에서도 그대로 읽힌다", async () => {
+    const { client, fetchApi, mst } = stub(lawJson([unit("0001"), unit("0002", { 별표서식파일링크: "" }), unit("0000")]))
+    const units = await fetchLawAnnexUnits(client, mst)
+    expect(skippedAnnexUnits(units).map(s => [s.code6, s.reason])).toEqual([["000200", "no_link"], ["000000", "zero_code"]])
+    expect(soleZeroCodeUnit(units)?.hwpLink).toBe("/LSW/flDownload.do?flSeq=0000")
+    const again = await fetchLawAnnexUnits(client, mst)
+    expect(fetchApi).toHaveBeenCalledTimes(1)
+    expect(skippedAnnexUnits(again)).toHaveLength(2)
+  })
+
+  it("무번호 별표가 2건 이상이면 어느 쪽인지 정할 수 없어 짝짓지 않는다", async () => {
+    const { client, mst } = stub(lawJson([unit("0001"), unit("0000", { 별표제목: "a" }), unit("0000", { 별표제목: "b", 별표서식파일링크: "/x" })]))
+    expect(soleZeroCodeUnit(await fetchLawAnnexUnits(client, mst))).toBeUndefined()
+  })
+
+  it("링크 키가 없는 항목이 하나라도 있으면 캐시하지 않는다", async () => {
+    const noKey = { 별표번호: "0002", 별표가지번호: "00", 별표구분: "별표", 별표제목: "x" }
+    const { client, fetchApi, mst } = stub(lawJson([unit("0001"), noKey]))
+    const units = await fetchLawAnnexUnits(client, mst)
+    expect(skippedAnnexUnits(units).map(s => s.reason)).toEqual(["no_link_key"])
+    await fetchLawAnnexUnits(client, mst)
+    expect(fetchApi).toHaveBeenCalledTimes(2)
+  })
+
+  it("별표 요소가 빈 문자열·빈 배열이면 별표 없음(예외 아님)", async () => {
+    for (const annex of ["", [], {}]) {
+      const s = stub(JSON.stringify({ 법령: { 별표: annex } }))
+      await expect(fetchLawAnnexUnits(s.client, s.mst)).resolves.toEqual([])
+    }
   })
 })

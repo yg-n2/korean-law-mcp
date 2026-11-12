@@ -8,6 +8,7 @@
  */
 import type { LawApiClient } from "../lib/api-client.js"
 import { fetchLawAnnexUnits, type LawAnnexUnit } from "../lib/annex-canonical.js"
+import { emptyUnitsIssue, usableCanonicalUnits } from "../lib/annex-canonical-n2.js"
 import { fetchLawVersions, lawStateAt, sameLawName, todayKst, versionInForce } from "../lib/law-lineage.js"
 import { notFoundResponse } from "../lib/errors.js"
 import { formatDateDot, truncateResponse } from "../lib/schemas.js"
@@ -72,7 +73,15 @@ export async function getAnnexesAtDate(
   }
   header += "\n"
 
-  const units = await fetchLawAnnexUnits(apiClient, v.mst, input.apiKey, v.efYd)
+  // [N2 패치 7] 단일 무번호 별표(000000)는 정본 단위로 되살리고, 걸러진 항목만 있으면 "없음" 대신 확인 불가
+  const units = usableCanonicalUnits(await fetchLawAnnexUnits(apiClient, v.mst, input.apiKey, v.efYd))
+  const unusable = emptyUnitsIssue(units)
+  if (unusable) {
+    return prepend(header, {
+      content: [{ type: "text", text: `[확인 불가] 「${thenName}」 시행 ${formatDateDot(v.efYd)} 버전의 별표를 확인하지 못했습니다(${unusable}).\n\n⚠️ '별표가 없다'고 단정하지 마세요. 법제처에서 직접 확인하도록 안내하세요.` }],
+      isError: true,
+    })
+  }
   if (units.length === 0) {
     return notFoundResponse(`「${thenName}」 시행 ${formatDateDot(v.efYd)} 버전 본문에 별표·서식이 없습니다.`, [
       "모법·하위법령에 별표가 있을 수 있습니다 (시행령 ↔ 시행규칙).",

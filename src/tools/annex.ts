@@ -14,6 +14,7 @@ import { rethrowIfFatal } from "../lib/fatal-errors.js"
 import { getRequestSignal } from "../lib/session-state.js"
 import { getLawSiteBaseUrl } from "../lib/law-url-config.js"
 import { fetchLawAnnexUnits, findMissingUnits, pickAnnexUnit, type LawAnnexUnit } from "../lib/annex-canonical.js"
+import { listMergeIssue, reviewCanonicalPick } from "../lib/annex-canonical-n2.js"
 import { parseLawNameAndHint } from "../lib/annex-notation.js"
 import { getAnnexesAtDate } from "./annex-history.js"
 import { collectAnnexList, collectAdminAnnexList, ANNEX_PAGE_SIZE, MAX_ANNEX_PAGES, type AnnexTruncationReason } from "./annex-list.js"
@@ -196,6 +197,8 @@ export async function getAnnexes(
         try {
           const units = await loadUnits(mst)
           const missing = findMissingUnits(filtered, units)
+          // [N2 패치 7] 정본에서 걸러진 항목(형식 변경·무번호)이 색인에도 없으면 목록이 완전하지 않다
+          mergeIssue = listMergeIssue(filtered.map((a) => String(a.별표번호 || "")), units)
           listForDisplay = [
             ...filtered,
             ...missing.map((u): AnnexItem => ({
@@ -255,18 +258,29 @@ async function extractAnnexContent(
   // [N2 패치] 현행 본문(정본) 대조가 실제로 끝났는지. 끝나지 않았으면 색인에 없다는 이유로
   // "해당 별표 없음"을 단정하지 않는다 — 색인은 신설 별표를 누락하는 사례가 있다(#77).
   let canonicalChecked = false
+  // [N2 패치 7] 정본에서 걸러진 항목과 맞춰 본 결과 — 색인 링크 사용 경고 / 없음 대신 확인 불가 사유
+  let canonicalNoteN2 = ""
+  let canonicalUnverified: string | undefined
   if (lawType === "law") {
     const mst = matched?.관련법령일련번호 || annexList[0]?.관련법령일련번호
     if (mst) {
       try {
         const units = await loadUnits(String(mst))
         canonicalChecked = true
-        const unit = pickAnnexUnit(units, {
+        const selectorCandidates = matched ? undefined : buildSelectorCandidates(annexSelector)
+        const picked = pickAnnexUnit(units, {
           code6: matched?.별표번호 ? String(matched.별표번호).trim() : undefined,
           kind: matched?.별표종류 ? String(matched.별표종류) : undefined,
-          selectorCandidates: matched ? undefined : buildSelectorCandidates(annexSelector),
+          selectorCandidates,
           knd,
         })
+        const review = reviewCanonicalPick(units, picked, matched ? String(matched.별표번호 ?? "") : undefined, selectorCandidates)
+        const unit = review.unit
+        if (review.note) canonicalNoteN2 = review.note
+        if (review.unverified) {
+          canonicalChecked = false
+          canonicalUnverified = review.unverified
+        }
         if (unit) {
           matched = {
             ...(matched ?? {}),
@@ -289,7 +303,7 @@ async function extractAnnexContent(
   if (!matched) {
     const availableBylSeq = annexList.map((a) => a.별표번호).filter(Boolean).slice(0, 20).join(", ")
     if (lawType === "law" && !canonicalChecked) {
-      const why = canonicalIssue ? "현행 본문 조회 실패" : "대상 법령일련번호 미확정"
+      const why = canonicalIssue ? "현행 본문 조회 실패" : canonicalUnverified ?? "대상 법령일련번호 미확정"
       return {
         content: [{
           type: "text",
@@ -404,7 +418,7 @@ async function extractAnnexContent(
   const canonicalNote = canonicalIssue
     ? `⚠️ 정본 링크 확인 불가 (현행 본문 조회 실패) — 검색 인덱스(licbyl) 링크로 조회했습니다.\n` +
       `   최신 개정이 반영되지 않은 구본일 수 있습니다.\n`
-    : ""
+    : canonicalNoteN2
   const header = `${normalizedLawName} - ${annexTitle}\n(파일 형식: ${result.fileType.toUpperCase()}${result.pageCount ? `, ${result.pageCount}페이지` : ""})\n${canonicalNote}\n`
   const fullText = header + markdown
   return {

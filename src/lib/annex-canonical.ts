@@ -14,7 +14,7 @@
 
 import type { LawApiClient } from "./api-client.js"
 import { lawCache } from "./cache.js"
-import { parseCanonicalLawJson } from "./annex-canonical-n2.js"
+import { readCanonicalAnnexUnits } from "./annex-canonical-n2.js"
 
 export interface LawAnnexUnit {
   /** 별표번호(4) + 가지번호(2) — licbyl 별표번호와 같은 6자리 코드 */
@@ -131,8 +131,8 @@ export async function fetchLawAnnexUnits(
     apiKey,
   })
   // [N2 패치 7] 구조 결함(JSON 오류·오류 봉투·링크 필드 소실)은 '정본 대조 완료, 별표 없음'이 아니라 조회 실패다
-  const units = lawAnnexUnitsFromJson(parseCanonicalLawJson(text))
-  // 검증을 통과한 결과만 캐시한다(상류 별표단위 캐시 + N2 패치 7 구조 검증)
-  if (units.length > 0) lawCache.set(cacheKey, units, ANNEX_UNITS_TTL_MS)
+  const { units, cacheable } = readCanonicalAnnexUnits(text, lawAnnexUnitsFromJson)
+  // 검증을 통과한 결과만 캐시한다(상류 별표단위 캐시 + N2 패치 7 구조 검증·걸러진 항목 부착)
+  if (units.length > 0 && cacheable) lawCache.set(cacheKey, units, ANNEX_UNITS_TTL_MS)
   return units
 }
