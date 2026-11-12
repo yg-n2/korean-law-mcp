@@ -115,25 +115,10 @@ describe("N2: 정본 대조를 못 끝내면 '없음' 대신 '확인 불가'", (
   })
 })
 
-// L2는 상류 4.15.0이 기본값을 8MiB/24MiB로 올려 N2 패치를 걷어냈다(2026-10-20). 3MB급 시행령이 한도 안에 드는지만 계속 지킨다
-describe("L2: 실제 기동 본문 한도 기본값 (상류 8MiB/24MiB)", () => {
-  it("env가 없으면 단일 응답 8MiB, 요청 합계 24MiB", () => {
-    const l = readExecutionLimits({})
-    expect(l.maxUpstreamBodyBytes).toBe(8 * 1024 * 1024)
-    expect(l.maxTotalUpstreamBodyBytes).toBe(24 * 1024 * 1024)
-  })
-
-  it("3MB급 대형 시행령 본문이 한도 안에 든다 (2026-09-02 실측 3,080,999B)", () => {
+// [상류 회귀 고정] L2는 상류 4.15.0이 기본 한도를 8MiB/24MiB로 올려 N2 패치를 걷어냈다(2026-10-20).
+// 기본값 자체는 상류 결정이라 고정하지 않는다 — 3MB급 시행령(소득세법 시행령)이 한도 안에 드는지만 지킨다
+describe("상류 회귀 고정: 본문 한도 기본값이 대형 시행령을 담는다", () => {
+  it("3MB급 대형 시행령 본문이 단일 응답 한도 안에 든다 (2026-09-02 실측 3,080,999B)", () => {
     expect(readExecutionLimits({}).maxUpstreamBodyBytes).toBeGreaterThan(3_080_999)
-  })
-
-  it("env가 있으면 env 값이 우선한다", () => {
-    const l = readExecutionLimits({ MCP_MAX_UPSTREAM_BODY_BYTES: "2097152", MCP_MAX_TOTAL_UPSTREAM_BODY_BYTES: "8388608" })
-    expect(l.maxUpstreamBodyBytes).toBe(2097152)
-    expect(l.maxTotalUpstreamBodyBytes).toBe(8388608)
-  })
-
-  it("단일 한도만 env로 합계 기본(24MiB)보다 크게 주면 기존 검증대로 거부", () => {
-    expect(() => readExecutionLimits({ MCP_MAX_UPSTREAM_BODY_BYTES: String(40 * 1024 * 1024) })).toThrow(/at least/)
   })
 })
