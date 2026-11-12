@@ -1,6 +1,6 @@
 // N2 자체 패치 #2 테스트 — 무관 판례 전문 자동첨부 게이트
 import { describe, expect, it } from "vitest"
-import { gateTermGroupsForHit, passesRelevanceGate } from "./precedent-relevance-gate.js"
+import { gateTermGroupsForHit, passesRelevanceGate, stemGateToken } from "./precedent-relevance-gate.js"
 import type { PrecedentHit, StructuredPrecedentSearchResult } from "./precedent-search-core.js"
 
 function makeHit(overrides: Partial<PrecedentHit> = {}): PrecedentHit {
@@ -194,5 +194,31 @@ describe("passesRelevanceGate", () => {
     const hit = makeHit()
     expect(passesRelevanceGate("특수관계인 저가양도에 대한 부당행위계산부인 규정 적용", hit, result)).toBe(true)
     expect(passesRelevanceGate("전혀 무관한 산업재해 판결문", hit, result)).toBe(false)
+  })
+})
+
+describe("짧은 질의의 조사·어미 (2026-11-12 검수 #2)", () => {
+  const BODY = "퇴직금 중간정산의 효력에 관하여 근로자가 퇴직금을 중간정산 받은 경우 그 정산은 유효하다"
+  const gate = (query: string, body: string) =>
+    passesRelevanceGate(body, makeHit({ sourceQuery: query }), withOriginalQuery(query))
+
+  it("조사·어미가 붙은 2~3어절 질의도 관련 판례 본문을 통과시킨다", () => {
+    expect(gate("퇴직금을 중간정산하는 경우", BODY)).toBe(true)
+    expect(gate("임원 퇴직금 중간정산은", "임원의 퇴직금 중간정산 요건에 관한 판단")).toBe(true)
+    expect(gateTermGroupsForHit(makeHit({ sourceQuery: "퇴직금을 중간정산하는 경우" }), withOriginalQuery("퇴직금을 중간정산하는 경우")))
+      .toEqual([["퇴직금"], ["중간정산"]])
+  })
+
+  it("떼어 낸 뒤에도 변별 토큰은 남아 무관 판례는 여전히 막는다", () => {
+    const unrelated = "금지금 거래에서 가공세금계산서를 수취한 경우 매입세액 불공제"
+    expect(gate("퇴직금을 중간정산하는 경우", unrelated)).toBe(false)
+    expect(gate("임원 퇴직금 중간정산은", "임원 보수의 손금불산입에 관한 판단")).toBe(false)
+    expect(gate("식대 비과세 되나요?", "1세대 1주택 비과세 요건")).toBe(false)
+  })
+
+  it("떼고 남는 말이 2자 미만이면 떼지 않는다", () => {
+    expect(stemGateToken("도로")).toBe("도로")
+    expect(stemGateToken("명의")).toBe("명의")
+    expect(stemGateToken("부동산의")).toBe("부동산")
   })
 })

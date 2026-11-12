@@ -52,11 +52,34 @@ function isStopToken(token: string): boolean {
   return STOP_TOKENS.has(bare) || STOP_ENDINGS.test(bare) || STOP_AMBIGUOUS_ENDINGS.test(bare)
 }
 
+// 끝 조사·어미 (2026-11-12 검수 #2): 짧은 질의는 원문 토큰을 그대로 AND 조건으로 쓰므로
+// "퇴직금을 중간정산하는 경우"가 ["퇴직금을","중간정산하는","경우"]가 되어 관련 판례 본문도
+// 통과하지 못했다. 떼어 낸 형태는 원 토큰의 앞부분이라 대조가 엄격해지는 일은 없고, 떼고 남은
+// 말이 2자 미만이면 떼지 않는다(도로·명의 같은 낱말 보호). 긴 순서로 한 번만 뗀다.
+const TOKEN_ENDINGS = [
+  "으로써", "으로서", "에서는", "에게서", "이라는", "하였던", "했었던",
+  "하는", "하던", "했던", "한다", "하여", "해서", "하면", "하고", "되는", "되어", "된다", "에서", "에게", "에는",
+  "으로", "로서", "로써", "부터", "까지", "이나", "이란", "이라", "과의", "와의", "에의",
+  "을", "를", "은", "는", "이", "가", "의", "에", "와", "과", "도", "만", "로", "한",
+]
+// 판결문 어디에나 있어 변별력이 없는 말 — 필수어에서 뺀다(남은 토큰이 없으면 게이트 미적용)
+const GENERIC_TOKENS = new Set(["경우", "관련", "문제", "사례", "판례", "대법원"])
+
+export function stemGateToken(token: string): string {
+  const bare = token.replace(/[^\p{L}\p{N}]+/gu, "")
+  for (const ending of TOKEN_ENDINGS) {
+    if (bare.endsWith(ending) && bare.length - ending.length >= 2) return bare.slice(0, -ending.length)
+  }
+  return bare
+}
+
 function collectTokens(source: string | undefined, into: Set<string>): void {
   if (typeof source !== "string") return
   for (const token of source.split(/\s+/)) {
     if (isStopToken(token)) continue
-    if (normalizeRelevanceText(token).length >= 2) into.add(token)
+    const stem = stemGateToken(token)
+    if (GENERIC_TOKENS.has(stem)) continue
+    if (normalizeRelevanceText(stem).length >= 2) into.add(stem)
   }
 }
 
