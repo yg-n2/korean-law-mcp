@@ -29,6 +29,7 @@ squash 재적용 이후 n2 의 기준점은 각 동기화 절에 적은 상류 �
 | 8·9 R7 | 재조회 안내 lawId 우선·MST 현행 보장 아님 | ★`law-text.ts` | `law-text.n2-retry-hint.test.ts` | 미반영 (상류 main 여전히 mst 우선, PR 후보) |
 | 10 | 0건 시 축약 전에 검색 범위 전환 (nts·ministry) | `tools/decision-search-fallback.ts`, ★`unified-decisions.ts` 디스패치·options 설명 | `decision-search-fallback.test.ts` | 미반영 (options 설명은 PR 후보) |
 | 11 | 대비표 HWPX 파일 저장 비활성 | ★`index.ts`, ★`amendment-table.ts`, ★`tool-registry.ts`, ★`legal-analysis.ts` | `n2-file-output-off.test.ts`, ★`amendment-table.test.ts` | 불가 (상류 의도 기능) |
+| 12 | MST 단독 조회 공포본 → 시행 판, 현행 조회 판 안내(반영 개정·현행 여부·시행 전 개정) | `lib/law-text-slice-n2.ts`·`lib/law-currency-n2.ts`(신규), ★`api-client.ts`(3곳), ★`law-text.ts`(1블록) | `law-text-slice-n2.test.ts` | 미반영 (★상류 보고 후보) |
 | 시험 | 상류 시험 Windows 수정 (`HOME`과 함께 `USERPROFILE`) | ★`amendment-table.test.ts` | — | 미반영 (PR 후보) |
 
 **은퇴(상류가 대체)**: 1 nts 본문(4.15.10) · 3 안건번호 표기(4.15.4, 시험도 2026-11-12 삭제) · 6 L2 본문 한도(4.15.0, "상류 회귀 고정" 시험 1건만 유지) ·
@@ -395,6 +396,23 @@ squash 재적용 이후 n2 의 기준점은 각 동기화 절에 적은 상류 �
 - 축약 재검색 결과에 관련성 선별 없음: 본문 범위 1어절 적중은 원 질의와 대조 없이 목록으로 나간다 — 원 질의 토큰이 안건명·요지에 없으면 표시를 달리하는 보완
 - 게이트: `어린이→어린`처럼 한 글자 `이·가·로·한` 어미가 명사 끝을 깎는 경우가 남음(보호 꼬리말은 목록 방식)
 - `{"법령":{}}` 통과(기본정보 필수화는 상류 시험 픽스처 수정이 필요해 보류)
+
+### 12. MST 단독 조회의 공포본(개정 전 원문) 반환 차단 + 현행 조회 판 안내 (2026-11-13) — ★상류 보고 후보
+- **무엇을**:
+  - `api-client.getLawText` MST 단독(efYd 없음)이 target=law 로 받은 응답이 공포본(`기본정보.공포법령여부=Y`)이고 시행일이 오늘 이전이면,
+    같은 MST·시행일의 시행 판(eflaw MST+efYd)으로 다시 받는다. MST 별 시행일을 하루 기억해 다음부터 시행 판으로 바로 간다(추가 호출은 MST 당 첫 1회).
+    시행 판이 없다는 응답이면 공포본, 그 밖의 장애는 올린다(`lib/law-text-slice-n2.ts`)
+  - `get_law_text` 시행일 지정 없는 조회는 계보로 ① 머리글 공포일 뒤에 공포됐지만 먼저 시행돼 함께 반영된 개정 ② 오늘 시행 중인 판이 아니면 그 사실
+    ③ 공포됐지만 시행 전인 개정을 머리글 아래에 적는다(`lib/law-currency-n2.ts`, 계보는 기존 `lineage:` 캐시 1시간)
+- **왜**: 실무 QA(2026-11-13)에서 search_law 가 [현행]으로 안내한 상법 MST 273629 로 조회하면 개정 전 제342조가 나오고 2026.3.6 시행 제341조의4는 NOT_FOUND.
+  실측: target=law MST 273629 = 공포본(공포 2025.9.9 제21044호 원문, 공포법령여부 Y) / eflaw MST 273629 efYd=20260910 = 시행 판(공포법령여부 N, 2026.3.6 공포·시행
+  제21448호 반영 — lawId 조회와 같은 판). 머리글은 두 경우 모두 기본정보의 "공포 20250909 / 시행 20260910"이라 모델이 구별할 수 없었다.
+  원인은 상류 4.12 이후 MST 단독을 target=law 로 보내는 설계("MST 는 버전 고유값이라 target=law 가 그 버전 전문") — 나중에 공포돼 먼저 시행된 개정이 있으면 틀린다.
+  같은 구조(현행 판보다 나중 공포·먼저 시행된 개정)가 소득세법(285523, 2026.4.21)·근로기준법(290781, 2026.8.4 공포 10.2 시행)·조세특례제한법(3건)에도 있다(계보 대조, 법인세법은 없음)
+- **영향 범위**: MST 단독을 쓰는 모든 경로(get_law_text, verify_citations 법령 조문 검증, batch·penalty 등). verify_citations 는 법령당 첫 조회에 1회 추가 호출
+- **건드린 파일**: `src/lib/law-text-slice-n2.ts`·`src/lib/law-currency-n2.ts`(신규) + `.test.ts`(신규 8건), ★`src/lib/api-client.ts`(import 1줄 + 앞뒤 2곳), ★`src/tools/law-text.ts`(import 1줄 + 1블록)
+- **upstream PR 가능 여부**: 가능 — 상류 결함(상류 main 3f7c7d8 의 api-client 동일). 보고 후보
+- **검증 방법**: 시험 8건(수정 전 소스에서 3건 실패 확인), 실호출 사례 `eval\law\cases\18_mst-current__get_law_text.json`(번들) — 제341조의4 본문 + 반영 개정·시행 전 개정 안내
 
 <!-- 패치 항목 템플릿 (복사해서 사용)
 ### N. <제목> (YYYY-MM-DD)

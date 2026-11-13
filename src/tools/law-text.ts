@@ -14,6 +14,7 @@ import { fetchLineageVersions, isRepealRow, lawStateAt, todayKst, versionInForce
 import type { HistoricalVersion } from "../lib/historical-utils.js"
 import { UpstreamRecordMissingError } from "../lib/upstream-miss.js"
 import { formatDateDot } from "../lib/schemas.js"
+import { currencyNotesFor } from "../lib/law-currency-n2.js"
 import { flattenAddendum, normalizeDate } from "./applicable-law.js"
 
 import { MAX_RESPONSE_SIZE, truncateResponse } from "../lib/schemas.js"
@@ -189,6 +190,14 @@ async function renderLawText(apiClient: LawApiClient, input: GetLawTextInput, re
       resultText += `⚠️ 시행 예정 버전 (조회기준일 ${today} 현재 미시행). 현재 효력 있는 조문과 다를 수 있음.\n`
     } else if (effDate) {
       resultText += `ℹ️ 조회기준일 ${today} — 위 시행일 버전 본문. 연혁 MST로 조회한 경우 과거 버전일 수 있으니, 개정 여부가 의심되면 search_law로 [현행] MST를 재확인할 것.\n`
+    }
+    // [N2 패치 12] 시행일 지정 없는 조회: 이 판에 반영된 이후 공포 개정·현행 여부·시행 전 개정을 계보로 알린다
+    if (!input.efYd && !resolved) {
+      resultText += await currencyNotesFor({
+        lawId: input.lawId || (basicInfo?.법령ID ? String(basicInfo.법령ID) : undefined),
+        promDate: String(promDate), effDate: String(effDate),
+        promulgatedOnly: String(basicInfo?.공포법령여부 ?? "") === "Y",
+      }, today, id => lineageOf(apiClient, id, input.apiKey))
     }
     resultText += `\n`
 

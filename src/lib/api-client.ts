@@ -26,6 +26,7 @@ const lookupRetryFor = (target: string) =>
   MISS_AS_BAD_BODY_TARGETS.has(target) ? DRF_LOOKUP_RETRY : DRF_RETRY
 import { requestContext } from "./session-state.js"
 import { getLawApiBaseUrl } from "./law-url-config.js"
+import { knownSliceEfYd, preferEffectiveSlice } from "./law-text-slice-n2.js"
 
 const LAW_API_BASE = getLawApiBaseUrl()
 
@@ -183,6 +184,11 @@ export class LawApiClient {
     // 공포본이면 target=law 가 마지막 시행 슬라이스를 돌려준다(실측: MST 281865 → 시행
     // 20271231, 시행 중인 20260701 아님). 시행일을 못박은 호출에 다른 슬라이스를 끼워 넣으면
     // NOT_FOUND 보다 나쁜 조용한 오답(행위시법 조문 비교 오염)이 된다.
+    // [N2 패치 12] 이 MST 의 시행 판 시행일을 이미 알면 공포본(target=law)을 거치지 않고 시행 판으로 간다
+    if (params.mst && !params.efYd) {
+      const sliceEfYd = knownSliceEfYd(String(params.mst))
+      if (sliceEfYd) return this.getLawText({ ...params, efYd: sliceEfYd })
+    }
     const byMstOnly = Boolean(params.mst) && !params.efYd
     const target = byMstOnly ? "law" : "eflaw"
     const apiParams = new URLSearchParams({
@@ -208,7 +214,11 @@ export class LawApiClient {
       ? `법령 조문(${params.jo})을 찾을 수 없습니다. MST/lawId와 조문번호를 확인해주세요.`
       : "법령을 찾을 수 없습니다. MST 또는 법령명을 확인해주세요."
     // 빈 봉투("{}")는 그대로 돌려보내 상위 레이어가 NOT_FOUND 로 표면화한다
-    return await this.readBody(response, "법령 조회", notFoundContext)
+    const body = await this.readBody(response, "법령 조회", notFoundContext)
+    // [N2 패치 12] target=law 는 공포본(개정 전 원문)이다 — 이미 시행됐으면 같은 시행일의 시행 판으로 바꾼다
+    return byMstOnly
+      ? await preferEffectiveSlice(body, String(params.mst), efYd => this.getLawText({ ...params, efYd }))
+      : body
   }
 
   /**
