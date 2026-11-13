@@ -217,7 +217,8 @@ export class LawApiClient {
     const body = await this.readBody(response, "법령 조회", notFoundContext)
     // [N2 패치 12] target=law 는 공포본(개정 전 원문)이다 — 이미 시행됐으면 같은 시행일의 시행 판으로 바꾼다
     return byMstOnly
-      ? await preferEffectiveSlice(body, String(params.mst), efYd => this.getLawText({ ...params, efYd }))
+      ? await preferEffectiveSlice(body, String(params.mst), // 시행 판이 없으면 eflaw 는 HTML 안내 페이지로 답한다 — 미스 허용으로 확인 1회 뒤 공포본으로 물러선다(r3 E1)
+        efYd => this.getLawText({ ...params, efYd, efYdMayMiss: true }))
       : body
   }
 

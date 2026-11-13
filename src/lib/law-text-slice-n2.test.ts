@@ -120,3 +120,48 @@ describe("currencyNotes", () => {
     expect(currencyNotes(LINEAGE, { promDate: "20260306", effDate: "20270101", promulgatedOnly: true }, "20261113")).toBe("")
   })
 })
+
+describe("시행 판이 없는 MST — 안내 페이지면 공포본으로 물러선다 (적대적 검토 r3 E1)", () => {
+  const HTML_GUIDE = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN">
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>국가법령정보 공동활용</title></head>
+<body>미신청된 목록/본문에 대한 접근입니다.</body></html>`
+  let urls: string[] = []
+  beforeEach(() => {
+    lawCache.clear()
+    urls = []
+    vi.useFakeTimers({ now: NOW, toFake: ["Date"] })
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      urls.push(String(url))
+      return String(url).includes("target=law&")
+        ? json(PROMULGATED)
+        : new Response(HTML_GUIDE, { status: 200, headers: { "content-type": "text/html" } })
+    }))
+  })
+  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
+
+  it("api-client: 오류가 아니라 공포본을 돌려주고, 시행 판 재조회는 확인 1회로 끝낸다", async () => {
+    const client = new LawApiClient({ apiKey: "test" })
+    const body = JSON.parse(await client.getLawText({ mst: "273629", jo: "034200" }))
+    expect(body.법령.기본정보.공포법령여부).toBe("Y")
+    expect(urls.length).toBeLessThanOrEqual(3)
+    expect(urls.filter(u => u.includes("target=eflaw")).length).toBeLessThanOrEqual(2)
+  })
+
+  it("get_law_text: 공포본 본문에 '이후 개정이 빠져 있을 수 있음' 경고를 붙인다(계보를 못 받아도)", async () => {
+    const client = new LawApiClient({ apiKey: "test" })
+    const r = await getLawText(client, { mst: "273629", jo: "제342조" })
+    const text = r.content[0].text
+    expect(r.isError).toBeFalsy()
+    expect(text).toContain("정관에 규정이 없는 것은 이사회가 결정한다")
+    expect(text).toContain("공포 당시 원문입니다(시행 판을 받지 못함)")
+  })
+})
+
+describe("옛 판 문구 (적대적 검토 r3 3절)", () => {
+  it("현행 아님과 '위 본문은 오늘 시행 중인 조문'이 함께 나오지 않는다", () => {
+    const text = currencyNotes(LINEAGE, { promDate: "20250722", effDate: "20250722", promulgatedOnly: false }, "20261113")
+    expect(text).toContain("현행 아님")
+    expect(text).toContain("공포됐지만 아직 시행 전인 개정도 있습니다")
+    expect(text).not.toContain("위 본문은 오늘 시행 중인 조문")
+  })
+})
